@@ -1,0 +1,49 @@
+{
+  "name": "jafa-hub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --import tsx scripts/dev.ts",
+    "build": "prisma generate && next build",
+    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --experimental-test-isolation=none tests/*.test.ts",
+    "test:integration": "node --import tsx --test --experimental-test-isolation=none tests/integration/*.test.ts",
+    "test:e2e": "playwright test",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "setup:local": "node --env-file=.env --import tsx scripts/setup-local.ts",
+    "local:backup": "node --env-file=.env --import tsx scripts/local-backup.ts backup",
+    "local:restore": "node --env-file=.env --import tsx scripts/local-backup.ts restore",
+    "db:import": "node --env-file=.env --import tsx scripts/import-content.ts",
+    "admin:bootstrap": "node --env-file=.env --import tsx scripts/bootstrap-admin.ts",
+    "admin:recover": "node --env-file=.env --import tsx scripts/recover-admin.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.4.1",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "better-auth": "1.7.13",
+    "next": "16.4.3",
+    "pg": "8.22.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "0.35.5",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "20.19.43",
+    "@types/pg": "8.20.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "prisma": "7.10.1",
+    "tsx": "4.23.1",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,33 @@
+.panel { position: fixed; inset: auto 24px 24px auto; margin: 0; width: 410px; height: min(650px, calc(100dvh - 48px)); padding: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 75px rgb(3 27 59 / .25); } /* taste-skill-ignore: real FAQ dialog overlay. */
+.panel[open] { display: flex; flex-direction: column; }
+.panel::backdrop { background: rgb(3 27 59 / .2); }
+.head { padding: 22px; background: var(--navy); color: var(--paper); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.head h2 { font-family: var(--font-body),sans-serif; font-size: 16px; line-height: 1.5; }
+.head p { color: #c8d5e6; font-size: 13px; }
+.head button { border: 0; background: none; color: var(--paper); width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+.head button:focus-visible { outline-color: currentColor; }
+.body { flex: 1; overflow-y: auto; padding: 24px 20px; background: var(--soft); }
+.body:focus-visible { outline-offset: -3px; }
+.welcome { background: var(--paper); padding: 18px; font-size: 14px; }
+.welcome strong { display: block; margin-bottom: 10px; }
+.welcome small { color: var(--muted); font-size: 13px; display: block; margin-top: 12px; }
+.topics { display: grid; gap: 9px; margin-top: 18px; }
+.topics button { text-align: left; background: var(--paper); border: 1px solid var(--muted); border-radius: 2px; padding: 12px 14px; font-size: 13px; color: var(--navy); min-height: 44px; }
+.topics button:hover { background: #e5edf6; }
+.message { margin-top: 18px; background: var(--paper); padding: 16px; font-size: 13px; overflow-wrap: anywhere; }
+.message p { font-size: 13px; margin-bottom: 12px; }
+.message :global(h2) { font-size: 24px; }
+.user { margin-left: 40px; background: var(--navy); color: var(--paper); }
+.message small { display: block; color: var(--muted); font-size: 13px; }
+.sources { margin-top: 14px; display: grid; gap: 8px; }
+.sources a { font-size: 13px; color: var(--navy); text-decoration: underline; min-height: 30px; }
+.form { padding: 14px 18px 18px; background: var(--paper); }
+.inputRow { display: flex; gap: 10px; }
+.inputRow input { font-size: 13px; padding-inline: 12px; }
+.send { width: 46px; min-width: 46px; border: 0; background: var(--navy); color: var(--paper); }
+.form small { display: block; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.error { padding: 12px 0 0; color: var(--error); font-size: 13px; }
+.loading { font-size: 13px; color: var(--muted); padding-top: 16px; }
+@media (max-width:520px) {
+  .panel { inset: 12px; width: auto; height: calc(100dvh - 24px); max-height: none; max-width: none; }
+}

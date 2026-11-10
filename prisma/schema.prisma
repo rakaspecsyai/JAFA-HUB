@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  editor
+  approver
+  admin
+}
+
+enum ContentKind {
+  profession
+  article
+  regulation
+  faq
+  page
+}
+
+enum RevisionStatus {
+  draft
+  submitted
+  returned
+  approved
+}
+
+model User {
+  id                 String    @id @default(uuid()) @db.Uuid
+  name               String
+  email              String    @unique
+  /// Legacy migration input; emptied after credentials move to Account.
+  passwordHash       String?
+  emailVerified      Boolean   @default(false)
+  image              String?
+  role               Role
+  active             Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  sessions           Session[]
+  accounts           Account[]
+  contributions      RevisionContributor[]
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  ipAddress String?
+  userAgent String?
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id @default(uuid()) @db.Uuid
+  accountId             String
+  providerId            String
+  userId                String    @db.Uuid
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  password              String?
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(uuid()) @db.Uuid
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+  @@index([identifier])
+}
+
+model ContentItem {
+  id                  String             @id @default(uuid()) @db.Uuid
+  kind                ContentKind
+  slug                String
+  archived            Boolean            @default(false)
+  publishedRevisionId String?            @unique @db.Uuid
+  publishedRevision   ContentRevision?   @relation("Published", fields: [publishedRevisionId], references: [id], onDelete: Restrict)
+  firstPublishedAt    DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  revisions           ContentRevision[]  @relation("Revisions")
+  searchEntry         PublishedSearchEntry?
+  @@unique([kind, slug])
+}
+
+model ContentRevision {
+  id           String               @id @default(uuid()) @db.Uuid
+  itemId       String               @db.Uuid
+  item         ContentItem          @relation("Revisions", fields: [itemId], references: [id], onDelete: Restrict)
+  publishedFor ContentItem?         @relation("Published")
+  number       Int
+  version      Int                  @default(1)
+  status       RevisionStatus       @default(draft)
+  payload      Json
+  reviewedOn   String
+  authorId     String?              @db.Uuid
+  submitterId  String?              @db.Uuid
+  reviewerId   String?              @db.Uuid
+  note         String               @default("")
+  submittedAt  DateTime?
+  decidedAt    DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  sources      SourceReference[]
+  professions  RevisionProfession[]
+  media        RevisionMedia[]
+  contributors RevisionContributor[]
+  @@unique([itemId, number])
+  @@index([status, updatedAt])
+}
+
+model RevisionContributor {
+  revisionId String          @db.Uuid
+  revision   ContentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  userId     String          @db.Uuid
+  user       User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@id([revisionId, userId])
+  @@index([userId])
+}
+
+model SourceReference {
+  id          String          @id @default(uuid()) @db.Uuid
+  revisionId  String          @db.Uuid
+  revision    ContentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  title       String
+  url         String?
+  internalRef String?
+  publisher   String          @default("")
+  reviewedOn  String
+  order       Int
+}
+
+model RevisionProfession {
+  revisionId String          @db.Uuid
+  revision   ContentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  key        String
+  @@id([revisionId, key])
+}
+
+model MediaAsset {
+  id          String          @id @default(uuid()) @db.Uuid
+  storageKey  String          @unique
+  mime        String
+  size        Int
+  width       Int
+  height      Int
+  attribution String
+  uploadedBy  String          @db.Uuid
+  createdAt   DateTime        @default(now())
+  uses        RevisionMedia[]
+}
+
+model RevisionMedia {
+  revisionId String          @db.Uuid
+  revision   ContentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  mediaId    String          @db.Uuid
+  media      MediaAsset      @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  alt        String
+  caption    String          @default("")
+  @@id([revisionId, mediaId])
+}
+
+model PublishedSearchEntry {
+  itemId      String      @id @db.Uuid
+  item        ContentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  revisionId  String      @db.Uuid
+  kind        ContentKind
+  title       String
+  summary     String
+  text        String
+  path        String
+  professions String[]
+  publishedAt DateTime
+  @@index([kind, publishedAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  actorName  String
+  action     String
+  objectId   String
+  revisionId String?
+  note       String   @default("")
+  requestId  String   @default(uuid())
+  createdAt  DateTime @default(now())
+  @@index([createdAt])
+}
+
+model RateLimit {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+  @@index([expiresAt])
+}
