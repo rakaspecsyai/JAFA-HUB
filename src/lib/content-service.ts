@@ -27,7 +27,7 @@ export async function checkActor(tx: Tx, actor: Staff, role: Role) {
 function audit(tx: Tx, actor: Staff, action: string, objectId: string, revisionId?: string, note = "") {
   return tx.auditEvent.create({ data: { actorId: actor.id, actorName: actor.name, action, objectId, revisionId, note } });
 }
-const conflict = () => new AppError("Versi ini telah berubah di sesi lain. Masukan Anda belum ditimpa. Muat ulang untuk membandingkan versi terbaru.", 409);
+const conflict = () => new AppError("Versi ini telah berubah di sesi lain. Masukan Anda belum ditimpa. Bandingkan dengan versi tersimpan sebelum melanjutkan.", 409);
 async function lockItem(tx: Tx, id: string) {
   await tx.$queryRaw`SELECT id FROM "ContentItem" WHERE id = ${id}::uuid FOR UPDATE`;
   const item = await tx.contentItem.findUnique({ where: { id }, include: { revisions: { orderBy: { number: "desc" }, take: 1, include: { sources: true, professions: true, media: true } } } });

@@ -4,6 +4,20 @@ import { scryptSync } from "node:crypto";
 import { DUMMY_PASSWORD_HASH, hashPassword, verifyPassword } from "../src/lib/passwords";
 import { assertOrigin } from "../src/lib/http";
 import { clientKey } from "../src/lib/rate-limit";
+import { AppError, publicError } from "../src/lib/errors";
+
+test("hasil action membedakan status publik tanpa membocorkan kesalahan internal", t => {
+  for (const status of [400, 401, 403, 409, 429]) {
+    const error = new AppError("Pesan untuk pengguna.", status, { title: "Periksa judul." });
+    assert.deepEqual(publicError(error), { status, message: error.message, fields: error.fields });
+  }
+  const log = t.mock.method(console, "error", () => {});
+  const result = publicError(new Error("PRIVATE_DATABASE_DETAIL"));
+  assert.equal(result.status, 500);
+  assert.match(result.message, /Permintaan belum berhasil disimpan/);
+  assert.equal(JSON.stringify(result).includes("PRIVATE_DATABASE_DETAIL"), false);
+  assert.equal(JSON.stringify(log.mock.calls.map(call => call.arguments)).includes("PRIVATE_DATABASE_DETAIL"), false);
+});
 
 test("profil scrypt baru cocok dengan Node dan hash lama tetap dapat diverifikasi", async () => {
   const password = "Sandi-sintetis-regresi-123";

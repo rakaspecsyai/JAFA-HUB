@@ -2,7 +2,7 @@ import "next/dist/server/node-environment.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID, scryptSync } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, User } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { createRequestStoreForAPI } from "next/dist/server/async-storage/request-store.js";
 import { createWorkStore } from "next/dist/server/async-storage/work-store.js";
@@ -23,6 +23,54 @@ function withRequest<T>(headers: Headers, run: () => Promise<T>) {
 }
 
 export function registerSecurityTests(database: () => PrismaClient) {
+  test("Server Action CMS membedakan sesi, akses dan konflik tanpa menimpa revisi", async () => {
+    const db = database();
+    const auth = await import("../../src/lib/auth"), actions = await import("../../src/lib/admin-actions");
+    const service = await import("../../src/lib/content-service");
+    const password = "action-recovery-password-123", passwordHash = await hashPassword(password);
+    const actors: User[] = [], sessions: Headers[] = [];
+    for (const role of ["editor", "editor", "approver"] as const) {
+      const user = await db.user.create({ data: credentialUser({ email: `recovery-${randomUUID()}@uji.invalid`, name: "Petugas pemulihan uji", role, mustChangePassword: false }, passwordHash) });
+      actors.push(user);
+      const login = await withRequest(new Headers(), () => auth.authenticate(user.email, password, new Headers()));
+      const cookie = login.cookies.get(auth.sessionCookieName())!;
+      sessions.push(new Headers({ cookie: `${auth.sessionCookieName()}=${encodeURIComponent(cookie.value)}` }));
+    }
+    const input = { kind: "article", slug: `recovery-${randomUUID()}`, payload: payloadSchema.parse({ title: "Draf awal", summary: "Ringkasan", body: "Isi awal." }), reviewedOn: "2026-10-21", sources: [], professions: [] };
+    const form = (data: unknown) => { const result = new FormData(); result.set("data", JSON.stringify(data)); return result; };
+    const first = await service.saveDraft(actors[0], input);
+    const latest = await service.saveDraft(actors[0], { ...input, ...first, payload: { ...input.payload, title: "Versi tersimpan" } });
+    const snapshot = async () => ({
+      item: await db.contentItem.findUniqueOrThrow({ where: { id: first.itemId } }),
+      revisions: await db.contentRevision.findMany({ where: { itemId: first.itemId }, orderBy: { number: "asc" } }),
+      search: await db.publishedSearchEntry.findUnique({ where: { itemId: first.itemId } }),
+      audits: await db.auditEvent.count({ where: { objectId: first.itemId } })
+    });
+    const before = await snapshot(), currentInput = { ...input, ...latest, payload: { ...input.payload, title: "Masukan yang dipertahankan" } }, currentForm = form(currentInput);
+    for (const [headers, status] of [[new Headers(), 401], [sessions[2], 403]] as const) {
+      const result = (await withRequest(headers, () => actions.saveDraftAction({}, currentForm))).result;
+      assert.equal(result.status, status); assert.equal(result.ok, undefined);
+      assert.deepEqual(await snapshot(), before);
+    }
+    const stale = (await withRequest(sessions[1], () => actions.saveDraftAction({}, form({ ...input, ...first })))).result;
+    assert.equal(stale.status, 409); assert.equal(stale.ok, undefined); assert.doesNotMatch(stale.message!, /Muat ulang/);
+    const submit = new FormData();
+    for (const [key, value] of Object.entries({ itemId: first.itemId, revisionId: first.revisionId, version: first.version })) submit.set(key, String(value));
+    assert.equal((await withRequest(sessions[1], () => actions.submitAction({}, submit))).result.status, 409);
+    assert.deepEqual(await snapshot(), before);
+    await db.session.updateMany({ where: { userId: actors[1].id }, data: { expiresAt: new Date(0) } });
+    assert.equal((await withRequest(sessions[1], () => actions.saveDraftAction({}, currentForm))).result.status, 401);
+    assert.deepEqual(await snapshot(), before);
+    const login = await withRequest(new Headers(), () => auth.authenticate(actors[1].email, password, new Headers()));
+    const cookie = login.cookies.get(auth.sessionCookieName())!;
+    const headers = new Headers({ cookie: `${auth.sessionCookieName()}=${encodeURIComponent(cookie.value)}` });
+    const actor = (await withRequest(headers, () => auth.requireStaff(["editor"]))).result;
+    const retried = await service.saveDraft(actor, currentInput);
+    assert.equal(retried.version, latest.version + 1);
+    assert.equal(payloadSchema.parse((await db.contentRevision.findUniqueOrThrow({ where: { id: retried.revisionId } })).payload).title, "Masukan yang dipertahankan");
+    assert.equal(await db.publishedSearchEntry.findUnique({ where: { itemId: first.itemId } }), null);
+  });
+
   test("login generik, batas akun/IP, dan jendela yang pulih diperiksa lewat autentikasi nyata", async () => {
     const db = database(); const { authenticate } = await import("../../src/lib/auth");
     const { clientKey, privateKey } = await import("../../src/lib/rate-limit");
@@ -249,12 +297,12 @@ export function registerSecurityTests(database: () => PrismaClient) {
     assert.match(anonymous.message!, /Sesi Anda berakhir/); assert.equal(anonymous.ok, undefined);
     form.set("confirm", "konfirmasi-berbeda-123");
     const mismatch = (await withRequest(headers, () => passwordAction({}, form))).result;
-    assert.deepEqual(mismatch, { message: "Konfirmasi sandi baru tidak sama.", fields: { confirm: "Konfirmasi sandi baru tidak sama." } });
+    assert.deepEqual(mismatch, { status: 400, message: "Konfirmasi sandi baru tidak sama.", fields: { confirm: "Konfirmasi sandi baru tidak sama." } });
     form.set("confirm", nextPassword);
     for (const field of ["current", "password", "confirm"]) {
       const original = form.get(field)!;
       form.set(field, new File(["masukan-sintetis"], "password.txt"));
-      assert.deepEqual((await withRequest(headers, () => passwordAction({}, form))).result, { message: "Formulir sandi tidak sesuai.", fields: undefined });
+      assert.deepEqual((await withRequest(headers, () => passwordAction({}, form))).result, { status: 400, message: "Formulir sandi tidak sesuai.", fields: undefined });
       form.set(field, original);
     }
     assert.deepEqual(await snapshot(), before);
@@ -305,21 +353,22 @@ export function registerSecurityTests(database: () => PrismaClient) {
     });
     const submitted = await snapshot();
     for (const [action, input] of [[actions.decisionAction, decision], [actions.withdrawAction, withdraw]] as const) {
-      for (const [headers, message] of [
-        [new Headers(), "Sesi Anda berakhir. Silakan masuk kembali."],
-        [sessions.get(editor.id)!, "Peran Anda tidak memiliki akses untuk tindakan ini."],
-        [sessions.get(admin.id)!, "Peran Anda tidak memiliki akses untuk tindakan ini."]
+      for (const [headers, message, status] of [
+        [new Headers(), "Sesi Anda berakhir. Silakan masuk kembali.", 401],
+        [sessions.get(editor.id)!, "Peran Anda tidak memiliki akses untuk tindakan ini.", 403],
+        [sessions.get(admin.id)!, "Peran Anda tidak memiliki akses untuk tindakan ini.", 403]
       ] as const) {
         const { result } = await withRequest(headers, () => action({}, input));
         assert.equal(result.message, message);
+        assert.equal(result.status, status);
         assert.equal(result.ok, undefined); assert.equal(result.fields, undefined);
       }
       const approverHeaders = sessions.get(approver.id)!;
       const invalidForm = input === decision ? "Keputusan atau identitas revisi tidak sesuai." : "Isi alasan penarikan dan periksa identitas konten.";
       input.set("note", new File(["Catatan uji."], "note.txt"));
-      assert.deepEqual((await withRequest(approverHeaders, () => action({}, input))).result, { message: invalidForm, fields: undefined });
+      assert.deepEqual((await withRequest(approverHeaders, () => action({}, input))).result, { status: 400, message: invalidForm, fields: undefined });
       input.set("note", "Catatan uji."); input.set("itemId", "bukan-uuid");
-      assert.deepEqual((await withRequest(approverHeaders, () => action({}, input))).result, { message: invalidForm, fields: undefined });
+      assert.deepEqual((await withRequest(approverHeaders, () => action({}, input))).result, { status: 400, message: invalidForm, fields: undefined });
       input.set("itemId", saved.itemId);
     }
     for (const note of ["", " \t\n", "x".repeat(2001)]) {

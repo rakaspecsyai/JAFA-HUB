@@ -9,7 +9,7 @@ import { saveDraft, submitRevision, reviewRevision, withdrawContent } from "./co
 import { AppError, publicError } from "./errors";
 import { consumeRate, clientKey } from "./rate-limit";
 
-export type ActionState = { ok?: boolean; message?: string; fields?: Record<string, string>; itemId?: string; revisionId?: string; version?: number; password?: string; redirectTo?: string };
+export type ActionState = { ok?: boolean; status?: number; message?: string; fields?: Record<string, string>; itemId?: string; revisionId?: string; version?: number; password?: string; redirectTo?: string };
 function objectData(form: FormData) {
   const raw = form.get("data");
   if (typeof raw !== "string" || raw.length > 150000) throw new AppError("Formulir tidak sesuai atau terlalu besar.");
