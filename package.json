@@ -9,7 +9,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import tsx scripts/dev.ts",
     "build": "prisma generate && next build",
-    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "start": "node scripts/production.mjs start",
+    "runtime": "node scripts/production.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test --experimental-test-isolation=none tests/*.test.ts",
     "test:integration": "node --import tsx --test --experimental-test-isolation=none tests/integration/*.test.ts",

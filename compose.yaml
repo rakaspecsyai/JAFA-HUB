@@ -1,0 +1,67 @@
+name: jafa-hub-runtime
+
+x-application: &application
+  image: ${COMPOSE_PROJECT_NAME}-app:local
+  build:
+    context: .
+    target: runtime
+  init: true
+  environment:
+    NODE_ENV: production
+    JAFA_LOCAL_DATABASE: "false"
+    JAFA_CONTENT_PREVIEW: "false"
+    DATABASE_URL: postgresql://jafa:${POSTGRES_APP_PASSWORD:?Tetapkan password aplikasi berupa hex}@database:5432/jafa
+    APP_URL: ${APP_URL:?Tetapkan origin HTTPS}
+    AUTH_RATE_LIMIT_KEY: ${AUTH_RATE_LIMIT_KEY:?Tetapkan rahasia rate limit}
+    BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Tetapkan rahasia autentikasi}
+    MEDIA_DIRECTORY: /var/lib/jafa/media
+    TRUSTED_IP_HEADER: ${TRUSTED_IP_HEADER:-}
+  volumes:
+    - media:/var/lib/jafa/media
+  depends_on:
+    database:
+      condition: service_healthy
+
+services:
+  database:
+    build:
+      context: .
+      target: database
+    environment:
+      POSTGRES_DB: jafa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Tetapkan password admin database}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Tetapkan password aplikasi berupa hex}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "jafa", "-d", "jafa"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    stop_grace_period: 40s
+
+  app:
+    <<: *application
+    ports:
+      - "127.0.0.1:${JAFA_RUNTIME_PORT:-53174}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+    stop_grace_period: 40s
+
+  manage:
+    <<: *application
+    profiles: ["maintenance"]
+    command: ["check"]
+    logging:
+      driver: none
+
+volumes:
+  postgres:
+  media:

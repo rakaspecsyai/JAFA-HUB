@@ -72,6 +72,8 @@ Jika semua admin kehilangan akses, petugas teknis memakai `npm run admin:recover
 
 Revisi kerja terpisah dari penunjuk publik. Pengajuan mengunci isi; simpan versi basi ditolak. Keputusan, proyeksi pencarian, dan audit disimpan dalam satu transaksi. Media unggahan disimpan di luar `public/`, diperiksa isinya, dibersihkan metadata, dan hanya dapat dibaca publik selama dirujuk revisi terbit.
 
+Jika sesi habis saat menyimpan, tautan **Masuk kembali** membuka tab baru agar masukan tetap tersedia. Akses ditolak menyediakan pemeriksaan akun; konflik menyediakan **Lihat versi tersimpan** untuk dibandingkan pada tab baru. Pengguna memindahkan/menggabungkan perubahan pada versi terbaru secara manual; versi basi tetap ditolak dan tidak dinaikkan otomatis.
+
 Daftar CMS memfilter judul, status dan bidang dari revisi terbaru. Kanal kontak lama tetap kosong jika belum diisi; editor hanya memasukkan kanal yang sudah diverifikasi, dan perubahan baru tampil publik setelah persetujuan.
 
 Markdown terbatas mendukung paragraf, heading `##`, daftar `-`, `**tebal**`, serta tautan HTTPS/path lokal. Raw HTML tidak dieksekusi. Unggahan hanya JPEG/PNG/WebP diam, maksimal 5 MB dan 20 megapiksel.
@@ -107,9 +109,11 @@ Suite menolak `PLAYWRIGHT_BASE_URL` dan tidak memakai ulang server dev. Petunjuk
 
 Regresi fokus dialog/menu, skip link, validasi CMS/ganti sandi/akun, gulir keyboard tabel/percakapan FAQ, reflow dan jarak teks dicatat di [docs/AKSESIBILITAS.md](docs/AKSESIBILITAS.md). Kesalahan terkait kolom dengan fokus menuju masalah dan input bertahan ketika tindakan ditolak, termasuk kolom khusus profil/regulasi serta daftar jenjang/tugas/kompetensi. Formulir akun mengikuti pilihan tersimpan sesudah simpan/reset; nilai akses rusak ditolak. Hasil akun serta simpan/ajukan/putuskan/tarik konten menerima fokus. Pesan konten bertahan saat formulir/rute berganti dan dibersihkan ketika tindakan baru atau navigasi.
 
-**Pemeriksaan terbaru, 10 November 2026 — audit prioritas:** filter CMS diperbaiki agar memakai revisi terbaru; kanal Kontak URL/email/telepon dan jam opsional kini tersedia melalui editor/pratinjau/persetujuan. **21/21 unit, 49/49 integrasi, 4/4 E2E terarah, typecheck dan build produksi terisolasi lulus.** Dua screenshot region Kontak pada viewport 320/1440 CSS px ditinjau. Suite penuh 56 kasus tidak diulang. Hasil serta batas ada di [docs/VERIFICATION.md](docs/VERIFICATION.md).
+**Pemeriksaan terbaru, 10 November 2026 — pemulihan CMS:** status error serta tautan masuk kembali/periksa akses/bandingkan versi tersedia dengan input tetap. **22/22 unit, 50/50 integrasi, 4/4 E2E terarah, typecheck dan build produksi terisolasi lulus.** Browser memeriksa login salah peran yang tetap ditolak, login editor yang memulihkan simpan, serta konflik dua akun editor dengan penggabungan manual. Suite penuh 60 kasus tidak diulang. Hasil serta batas ada di [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-Urutan kerja aktif dan pemetaan kebutuhan ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Paket berikutnya adalah pemulihan sesi habis/konflik di CMS (FR-18). Pengujian aksesibilitas yang sudah lulus dibuka kembali bila ada perubahan terkait atau cacat yang dapat direproduksi; pemeriksaan manual/staging/UAT tetap gerbang rilis terpisah.
+Urutan kerja aktif dan pemetaan kebutuhan ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Paket A (filter/Kontak) dan B (pemulihan CMS FR-18) selesai lokal. Berikutnya persiapan runtime produksi/native; bukti PostgreSQL native tetap memerlukan sarana. Pengujian aksesibilitas yang sudah lulus dibuka kembali bila ada perubahan terkait atau cacat yang dapat direproduksi; pemeriksaan manual/staging/UAT tetap gerbang rilis terpisah.
+
+Paket audit prioritas sebelumnya memperbaiki filter revisi terbaru dan menambah kanal Kontak. **21/21 unit, 49/49 integrasi, 4/4 E2E terarah, typecheck dan build terisolasi lulus** pada kode sebelum pemulihan CMS.
 
 Paket textarea FAQ sebelumnya pada 10 November mempertahankan spasi/baris baru dan menandai URL yang ditolak. **18/18 unit, 46/46 integrasi, 52/52 E2E, typecheck dan build terisolasi lulus** pada kode sebelum audit ini.
 
