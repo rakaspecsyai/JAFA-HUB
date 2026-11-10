@@ -2,7 +2,7 @@ import { Prisma, type Role, type ContentKind } from "@prisma/client";
 import { z } from "zod";
 import { db } from "./db";
 import { AppError } from "./errors";
-import { calendarDate, contentPath, officialUrl, payloadSchema, PROFESSION_KEYS, safeUrl, searchText, type Kind, type Payload, type Source, type Staff } from "./content-types";
+import { calendarDate, contactHref, contentPath, officialUrl, payloadSchema, PROFESSION_KEYS, safeUrl, searchText, type Kind, type Payload, type Source, type Staff } from "./content-types";
 
 type Tx = Prisma.TransactionClient;
 const sourceSchema = z.object({ title: z.string().trim().max(300), url: z.string().trim().max(2000).nullable().optional(), internalRef: z.string().max(1000).nullable().optional(), publisher: z.string().max(300).optional(), reviewedOn: z.string().max(10) });
@@ -63,7 +63,8 @@ export function validateForPublication(kind: Kind, p: Payload, reviewedOn: strin
   }
   if (kind === "article" && p.articleType === "Kabar DJKN" && (!calendarDate(p.sourceDate) || p.sourceDate > today)) fields.sourceDate = "Isi tanggal publikasi sumber berita yang sah dan tidak berada di masa depan.";
   if (p.image && (!p.imageAlt || !p.imageCredit)) fields.imageAlt = "Gambar memerlukan teks alternatif dan atribusi.";
-  if (p.relatedLinks.some(l => !safeUrl(l.href))) fields.body = "Tautan terkait harus berupa path lokal atau HTTPS.";
+  if (p.relatedLinks.some(l => !safeUrl(l.href))) fields.relatedLinks = "Tautan terkait harus berupa path lokal atau HTTPS.";
+  if (p.contactChannels.some(channel => !channel.label || !contactHref(channel))) fields.contactChannels = "Lengkapi nama dan alamat setiap kanal kontak dengan URL HTTPS, email, atau nomor telepon yang sah.";
   if (Object.keys(fields).length) throw new AppError("Konten belum lengkap untuk diajukan. Periksa kolom yang ditandai.", 400, fields);
 }
 
@@ -72,7 +73,9 @@ export async function saveDraft(actor: Staff, raw: unknown) {
   const parsed = draftSchema.safeParse(raw);
   if (!parsed.success) throw new AppError("Format draf tidak sesuai. Periksa slug, isi, dan sumber.", 400);
   const input = parsed.data;
-  if (input.sources.some(s => s.url && !safeUrl(s.url, false)) || input.payload.relatedLinks.some(l => !safeUrl(l.href))) throw new AppError("Gunakan tautan HTTPS atau tautan lokal yang aman.");
+  if (input.sources.some(s => s.url && !safeUrl(s.url, false))) throw new AppError("Gunakan tautan HTTPS atau tautan lokal yang aman.");
+  if (input.payload.relatedLinks.some(l => !safeUrl(l.href))) throw new AppError("Gunakan tautan HTTPS atau tautan lokal yang aman.", 400, { relatedLinks: "Tautan terkait harus berupa path lokal atau HTTPS." });
+  if (input.payload.contactChannels.some(channel => channel.value && !contactHref(channel))) throw new AppError("Alamat kanal kontak tidak sesuai.", 400, { contactChannels: "Gunakan URL HTTPS, email, atau nomor telepon yang sah." });
   if (input.payload.image && !/^\/assets\/(hero|field|auction)\.webp$/.test(input.payload.image) && !/^\/api\/media\/[a-f0-9-]{36}$/.test(input.payload.image)) throw new AppError("Pilih gambar dari aset aplikasi atau unggahan CMS.");
   return db.$transaction(async tx => {
     await checkActor(tx, actor, "editor");

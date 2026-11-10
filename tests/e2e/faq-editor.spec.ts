@@ -1,0 +1,65 @@
+import { test, expect } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { testAccounts, testPassword } from "./accounts";
+
+test("tautan FAQ dapat diketik per baris dan dikoreksi tanpa kehilangan masukan", async ({ page, isMobile }) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({ width: isMobile ? 320 : 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/admin/login");
+  await page.getByLabel("Email pengelola").fill(testAccounts.editor.email);
+  await page.getByLabel("Sandi", { exact: true }).fill(testPassword);
+  await page.getByRole("button", { name: "Masuk ke CMS", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin$/, { timeout: 15000 });
+  await page.goto("/admin/faq/baru");
+  const slug = `faq-tautan-${randomUUID()}`, title = `Pertanyaan tautan ${slug.slice(-8)}`;
+  const question = page.getByRole("textbox", { name: "Pertanyaan", exact: true });
+  const answer = page.getByRole("textbox", { name: "Jawaban", exact: true });
+  const links = page.getByRole("textbox", { name: /^Tautan terkait/ });
+  const save = page.getByRole("button", { name: "Simpan draf", exact: true });
+  await question.fill(title); await page.getByLabel("Slug").fill(slug);
+  await page.getByRole("textbox", { name: "Ringkasan", exact: true }).fill("Ringkasan FAQ yang harus tetap tersedia.");
+  await answer.fill("Jawaban fixture untuk memeriksa penyuntingan tautan.");
+  await page.getByLabel("Tanggal tinjauan materi", { exact: true }).fill("2026-10-21");
+  const sources = page.getByRole("group", { name: "Sumber & rujukan", exact: true });
+  await sources.getByRole("button", { name: "Tambah sumber", exact: true }).click();
+  await sources.getByLabel("Judul sumber", { exact: true }).fill("Sumber FAQ fixture");
+  await sources.getByLabel("Tanggal tinjauan sumber", { exact: true }).fill("2026-10-21");
+  await sources.getByLabel("URL HTTPS publik", { exact: true }).fill("https://jdih.kemenkeu.go.id/dok/pmk-132-tahun-2023");
+
+  await links.focus(); await page.keyboard.type("Profil ");
+  await expect.soft(links).toHaveValue("Profil ");
+  const first = "Profil jabatan | /informasi/pelelang", second = "Sumber resmi | https://jdih.kemenkeu.go.id/";
+  await links.fill(first); await links.press("End"); await links.press("Enter");
+  await expect.soft(links).toHaveValue(`${first}\n`);
+  await page.keyboard.type(second);
+  await expect.soft(links).toHaveValue(`${first}\n${second}`);
+
+  const invalid = `${first}\nSumber resmi | javascript:alert(1)`;
+  await links.fill(invalid); await save.focus(); await page.keyboard.press("Enter");
+  await expect(page.getByRole("status")).toContainText("Gunakan tautan HTTPS atau tautan lokal yang aman.");
+  await expect.soft(links).toBeFocused();
+  await expect.soft(links).toHaveAccessibleName("Tautan terkait");
+  await expect.soft(links).toHaveAttribute("aria-invalid", "true");
+  await expect.soft(links).toHaveAccessibleDescription("Satu tautan per baris: Label | /path atau https://sumber Tautan terkait harus berupa path lokal atau HTTPS.");
+  await expect(links).toHaveValue(invalid); await expect(question).toHaveValue(title);
+  await expect(answer).toHaveValue("Jawaban fixture untuk memeriksa penyuntingan tautan.");
+  await page.addStyleTag({ content: "* { line-height: 1.5 !important; letter-spacing: .12em !important; word-spacing: .16em !important; } p { margin-bottom: 2em !important; }" });
+  await links.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: test.info().outputPath("faq-tautan-ditolak.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+  await links.fill(`${first}\n${second}`); await save.focus(); await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/admin\/faq\/[a-f0-9-]{36}$/, { timeout: 15000 });
+  await expect(page.getByRole("status").filter({ hasText: "Draf berhasil disimpan" })).toBeFocused();
+  await expect(links).toHaveAttribute("aria-invalid", "false");
+  await expect(links).toHaveAccessibleDescription("Satu tautan per baris: Label | /path atau https://sumber");
+  await page.reload();
+  await expect(links).toHaveValue(`${first}\n${second}`);
+  await expect(question).toHaveValue(title);
+  await page.getByRole("button", { name: "Ajukan pemeriksaan", exact: true }).click();
+  await expect(save).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Revisi diajukan dan dikunci" })).toBeFocused();
+  const publicResponse = await page.request.get("/faq");
+  expect(publicResponse.status()).toBe(200); expect(await publicResponse.text()).not.toContain(title);
+});

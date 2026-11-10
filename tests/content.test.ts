@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initialContent, previewEnabled } from "../src/lib/fixtures";
-import { calendarDate, safeUrl, officialUrl, normalizeQuery, payloadSchema, queryParam } from "../src/lib/content-types";
+import { calendarDate, contactHref, safeUrl, officialUrl, normalizeQuery, payloadSchema, queryParam } from "../src/lib/content-types";
 import { inlineTokens } from "../src/lib/markdown";
 import { validateForPublication } from "../src/lib/content-service";
 import { hashPassword, verifyPassword } from "../src/lib/passwords";
@@ -41,6 +41,35 @@ test("pratinjau draf tidak dapat diaktifkan pada produksi", () => {
   env.NODE_ENV = "production"; env.JAFA_CONTENT_PREVIEW = "true";
   try { assert.equal(previewEnabled(), false); }
   finally { if (previous === undefined) delete env.NODE_ENV; else env.NODE_ENV = previous; if (flag === undefined) delete env.JAFA_CONTENT_PREVIEW; else env.JAFA_CONTENT_PREVIEW = flag; }
+});
+test("payload lama tetap terbaca dan kanal kontak tidak dibuang saat disimpan", () => {
+  const old = payloadSchema.parse({ title: "Kontak", summary: "Pengelola", body: "Kanal resmi." });
+  assert.deepEqual(old.contactChannels, []); assert.equal(old.serviceHours, "");
+  const channels = [{ type: "email", label: "Email fixture", value: "kontak@uji.invalid" }];
+  const parsed = payloadSchema.parse({ ...old, contactChannels: channels, serviceHours: "Jam fixture" });
+  assert.deepEqual(parsed.contactChannels, channels); assert.equal(parsed.serviceHours, "Jam fixture");
+});
+test("pengajuan kontak menolak kanal yang tidak lengkap atau tidak aman", () => {
+  const page = initialContent.find(item => item.kind === "page" && item.slug === "kontak")!;
+  for (const channel of [
+    { type: "url", label: "Situs", value: "javascript:alert(1)" },
+    { type: "email", label: "Email", value: "salah" },
+    { type: "phone", label: "Telepon", value: "123?x=1" },
+    { type: "email", label: "", value: "kontak@uji.invalid" },
+    { type: "url", label: "Situs", value: "" }
+  ]) assert.throws(() => validateForPublication("page", payloadSchema.parse({ ...page.payload, contactChannels: [channel] }), page.reviewedOn, [], []), { fields: { contactChannels: "Lengkapi nama dan alamat setiap kanal kontak dengan URL HTTPS, email, atau nomor telepon yang sah." } });
+});
+test("kanal kontak hanya membentuk tautan HTTPS, mailto dan tel yang sah", () => {
+  assert.equal(contactHref({ type: "url", label: "Situs", value: "https://uji.invalid/kontak" }), "https://uji.invalid/kontak");
+  assert.equal(contactHref({ type: "email", label: "Email", value: "layanan@uji.invalid" }), "mailto:layanan@uji.invalid");
+  assert.equal(contactHref({ type: "phone", label: "Telepon", value: "+1 (202) 555-0143" }), "tel:+12025550143");
+  for (const value of ["javascript:alert(1)", "data:text/html,x", "//uji.invalid", "/kontak", "http://uji.invalid", "https://u:p@uji.invalid"]) assert.equal(contactHref({ type: "url", label: "Situs", value }), null);
+  for (const value of ["a@uji.invalid?subject=x", "a@uji.invalid\r\nBcc:b@uji.invalid", "a", ""]) assert.equal(contactHref({ type: "email", label: "Email", value }), null);
+  for (const value of ["+12025550143?x=1", "+1202\n5550143", "12345", "1".repeat(16)]) assert.equal(contactHref({ type: "phone", label: "Telepon", value }), null);
+  const base = { title: "Kontak", summary: "Pengelola", body: "Kanal resmi." };
+  assert.equal(payloadSchema.safeParse({ ...base, contactChannels: Array.from({ length: 11 }, () => ({ type: "email", label: "Email", value: "a@uji.invalid" })) }).success, false);
+  assert.equal(payloadSchema.safeParse({ ...base, contactChannels: [{ type: "script", label: "Salah", value: "x" }] }).success, false);
+  assert.equal(payloadSchema.safeParse({ ...base, serviceHours: "x".repeat(501) }).success, false);
 });
 test("sandi memakai salt acak, validasi panjang, dan verifikasi konstan", async () => {
   await assert.rejects(hashPassword("pendek")); const hash = await hashPassword("Sandi-uji-aman-123");

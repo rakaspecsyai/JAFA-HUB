@@ -117,6 +117,121 @@ for (const kind of ["profession", "regulation"] as const) test(`validasi ${kind}
   assert.equal((await repository.getPublished(kind, input.slug))?.revisionId, saved.revisionId);
 });
 
+test("tautan FAQ yang ditolak menunjuk kolom tanpa mengubah draf atau versi publik", async () => {
+  const links = [{ label: "Profil jabatan", href: "/informasi/pelelang" }, { label: "Sumber resmi", href: "https://jdih.kemenkeu.go.id/" }];
+  const input = draft({ kind: "faq", professions: [], payload: payloadSchema.parse({ title: "Pertanyaan tautan", summary: "Ringkasan", body: "Jawaban terkurasi.", relatedLinks: links }) });
+  const saved = await service.saveDraft(editor, input);
+  await service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version);
+  await service.reviewRevision(approver, saved.itemId, saved.revisionId, saved.version + 1, "publish", "Fixture tautan FAQ.");
+  saved.version = (await db.contentRevision.findUniqueOrThrow({ where: { id: saved.revisionId } })).version;
+  const snapshot = async () => ({
+    item: await db.contentItem.findUniqueOrThrow({ where: { id: saved.itemId } }),
+    revisions: await db.contentRevision.findMany({ where: { itemId: saved.itemId }, orderBy: { number: "asc" }, include: { sources: true, professions: true, media: true, contributors: true } }),
+    search: await db.publishedSearchEntry.findUnique({ where: { itemId: saved.itemId } }),
+    audits: await db.auditEvent.count({ where: { objectId: saved.itemId } })
+  });
+  const before = await snapshot();
+  for (const href of ["javascript:alert(1)", "data:text/html,x", "//example.invalid", "/\\example.invalid", "http://example.invalid", "https://u:p@example.invalid"]) {
+    const payload = { ...input.payload, relatedLinks: [links[0], { label: "Tautan yang ditolak", href }] };
+    const invalidLinks = (error: unknown) => {
+      assert.ok(error instanceof AppError); assert.equal(error.status, 400);
+      assert.deepEqual(publicError(error).fields, { relatedLinks: "Tautan terkait harus berupa path lokal atau HTTPS." });
+      return true;
+    };
+    await assert.rejects(service.saveDraft(editor, { ...input, ...saved, payload }), invalidLinks);
+    assert.throws(() => service.validateForPublication("faq", payload, input.reviewedOn, input.sources, []), invalidLinks);
+    assert.deepEqual(await snapshot(), before);
+    assert.deepEqual((await repository.getPublished("faq", input.slug))?.payload.relatedLinks, links);
+  }
+  assert.throws(() => service.validateForPublication("faq", { ...input.payload, body: "", relatedLinks: [{ label: "Ditolak", href: "javascript:alert(1)" }] }, input.reviewedOn, input.sources, []), error => {
+    assert.ok(error instanceof AppError);
+    assert.deepEqual(error.fields, { body: "Isi konten belum lengkap.", relatedLinks: "Tautan terkait harus berupa path lokal atau HTTPS." });
+    return true;
+  });
+  const corrected = await service.saveDraft(editor, { ...input, ...saved });
+  assert.notEqual(corrected.revisionId, saved.revisionId);
+  await service.submitRevision(editor, corrected.itemId, corrected.revisionId, corrected.version);
+  assert.deepEqual((await repository.getPublished("faq", input.slug))?.payload.relatedLinks, links);
+  await service.reviewRevision(approver, corrected.itemId, corrected.revisionId, corrected.version + 1, "publish", "Koreksi fixture tautan.");
+  assert.equal((await repository.getPublished("faq", input.slug))?.revisionId, corrected.revisionId);
+});
+
+test("filter CMS hanya memakai judul, status dan bidang revisi terbaru", async () => {
+  const { listWorkingContent } = await import("../../src/lib/admin-repository");
+  const token = randomUUID();
+  const input = draft({ payload: payloadSchema.parse({ title: `Histori ${token}`, summary: "Ringkasan", body: "Isi." }) });
+  const first = await service.saveDraft(editor, input);
+  await service.submitRevision(editor, first.itemId, first.revisionId, first.version);
+  await service.reviewRevision(approver, first.itemId, first.revisionId, first.version + 1, "publish", "Fixture daftar CMS.");
+  const approved = await db.contentRevision.findUniqueOrThrow({ where: { id: first.revisionId } });
+  const next = await service.saveDraft(editor, { ...input, ...first, version: approved.version, professions: ["plb"], payload: { ...input.payload, title: `Kerja ${token}` } });
+  assert.equal((await listWorkingContent("article", { q: token, status: "approved" })).total, 0);
+  assert.equal((await listWorkingContent("article", { q: `Histori ${token}` })).total, 0);
+  assert.equal((await listWorkingContent("article", { q: token, jf: "pp" })).total, 0);
+  const latest = await listWorkingContent("article", { q: `kERJa ${token}`, status: "draft", jf: "plb" });
+  assert.equal(latest.total, 1); assert.equal(latest.items[0].revisions[0].id, next.revisionId);
+  assert.equal((await listWorkingContent("article", { q: `${token}' OR '1'='1` })).total, 0);
+  assert.equal((await repository.getPublished("article", input.slug))?.payload.title, input.payload.title);
+});
+
+test("paginasi CMS stabil ketika waktu perubahan sama dan halaman melampaui hasil", async () => {
+  const { listWorkingContent } = await import("../../src/lib/admin-repository");
+  const token = randomUUID(), ids: string[] = [];
+  for (let n = 0; n < 21; n++) ids.push((await service.saveDraft(editor, draft({ payload: payloadSchema.parse({ title: `Paginasi ${token} ${n}`, summary: "Ringkasan", body: "Isi." }) }))).itemId);
+  await db.contentItem.updateMany({ where: { id: { in: ids } }, data: { updatedAt: new Date("2026-10-21T00:00:00Z") } });
+  const first = await listWorkingContent("article", { q: token, status: "draft", page: 1 });
+  const second = await listWorkingContent("article", { q: token, status: "draft", page: 2 });
+  const empty = await listWorkingContent("article", { q: token, page: 3 });
+  assert.equal(first.total, 21); assert.equal(second.total, 21); assert.equal(empty.total, 21);
+  assert.deepEqual(first.items.map(item => item.id), ids.sort().slice(0, 20));
+  assert.deepEqual(second.items.map(item => item.id), ids.slice(20));
+  assert.deepEqual(empty.items, []);
+});
+
+test("kanal kontak tersimpan melalui revisi dan hanya berubah publik setelah persetujuan", async () => {
+  const slug = `kontak-${randomUUID()}`;
+  const item = await db.contentItem.create({ data: { kind: "page", slug } });
+  const channels: Payload["contactChannels"] = [
+    { type: "url", label: "Situs fixture", value: "https://uji.invalid/kontak" },
+    { type: "email", label: "Email fixture", value: "layanan@uji.invalid" },
+    { type: "phone", label: "Telepon fixture", value: "+1 (202) 555-0143" }
+  ];
+  const input = draft({ itemId: item.id, kind: "page", slug, professions: [], sources: [], payload: payloadSchema.parse({ title: "Kontak fixture", summary: "Ringkasan", body: "Data sintetis, bukan kontak instansi.", contactChannels: channels, serviceHours: "Jam fixture" }) });
+  let saved = await service.saveDraft(editor, input);
+  assert.equal(await repository.getPublished("page", slug), null);
+  await service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version);
+  await service.reviewRevision(approver, saved.itemId, saved.revisionId, saved.version + 1, "publish", "Kontak sintetis untuk pengujian.");
+  saved.version = (await db.contentRevision.findUniqueOrThrow({ where: { id: saved.revisionId } })).version;
+  const published = await repository.getPublished("page", slug);
+  assert.deepEqual(published?.payload.contactChannels, channels); assert.equal(published?.payload.serviceHours, "Jam fixture");
+  const snapshot = async () => ({
+    item: await db.contentItem.findUnique({ where: { id: item.id } }),
+    revisions: await db.contentRevision.findMany({ where: { itemId: item.id }, orderBy: { number: "asc" } }),
+    search: await db.publishedSearchEntry.findUnique({ where: { itemId: item.id } }),
+    audits: await db.auditEvent.count({ where: { objectId: item.id } })
+  });
+  const before = await snapshot();
+  for (const channel of [{ type: "url", value: "javascript:alert(1)" }, { type: "email", value: "a@uji.invalid\r\nBcc:b@uji.invalid" }, { type: "phone", value: "123?x=1" }] as const) {
+    await assert.rejects(service.saveDraft(editor, { ...input, ...saved, payload: { ...input.payload, contactChannels: [{ ...channel, label: "Ditolak" }] } }), error => {
+      assert.ok(error instanceof AppError); assert.equal(error.status, 400);
+      assert.ok(error.fields?.contactChannels); return true;
+    });
+    assert.deepEqual(await snapshot(), before);
+  }
+  saved = await service.saveDraft(editor, { ...input, ...saved, payload: { ...input.payload, contactChannels: [{ type: "email", label: "", value: "" }] } });
+  const incomplete = await snapshot();
+  await assert.rejects(service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version), error => { assert.ok(error instanceof AppError); assert.ok(error.fields?.contactChannels); return true; });
+  assert.deepEqual(await snapshot(), incomplete); assert.deepEqual(await repository.getPublished("page", slug), published);
+  const revised = [{ type: "email" as const, label: "Email baru fixture", value: "baru@uji.invalid" }];
+  saved = await service.saveDraft(editor, { ...input, ...saved, payload: { ...input.payload, contactChannels: revised, serviceHours: "Jam baru fixture" } });
+  await service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version);
+  assert.deepEqual(await repository.getPublished("page", slug), published);
+  await service.reviewRevision(approver, saved.itemId, saved.revisionId, saved.version + 1, "publish", "Revisi kontak sintetis.");
+  assert.deepEqual((await repository.getPublished("page", slug))?.payload.contactChannels, revised);
+  await service.withdrawContent(approver, item.id, saved.revisionId, "Akhir uji kontak.");
+  assert.equal(await repository.getPublished("page", slug), null);
+});
+
 test("tidak boleh menyetujui revisi sendiri setelah peran berubah", async () => {
   const input = draft(); const saved = await service.saveDraft(editor, input);
   await service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version);

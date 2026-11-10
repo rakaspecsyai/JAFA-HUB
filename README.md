@@ -66,11 +66,13 @@ Jika semua admin kehilangan akses, petugas teknis memakai `npm run admin:recover
 - `/faq`: jawaban yang sama dengan asisten terkurasi global, dibuka dari tombol gelembung percakapan pada header. Asisten tidak memakai model AI.
 - `/pencarian`: pencarian seluruh kata, tidak membedakan kapital, hanya proyeksi versi terbit.
 - `/simulasi`: konversi lokal tanpa pengiriman input ke server, rincian rumus, validasi, reset, dan tabel baseline.
-- `/tentang`, `/kontak`, `/privasi`: halaman pendukung tetap melalui persetujuan.
+- `/tentang`, `/kontak`, `/privasi`: halaman pendukung tetap melalui persetujuan. Kontak mendukung kanal website/email/telepon dan jam layanan opsional dari CMS.
 - `/admin`: dashboard dan modul CMS, revisi, persetujuan, pengguna, aktivitas.
 - `/api/health`, `sitemap.xml`, `robots.txt`: pemeriksaan layanan dan metadata publik.
 
 Revisi kerja terpisah dari penunjuk publik. Pengajuan mengunci isi; simpan versi basi ditolak. Keputusan, proyeksi pencarian, dan audit disimpan dalam satu transaksi. Media unggahan disimpan di luar `public/`, diperiksa isinya, dibersihkan metadata, dan hanya dapat dibaca publik selama dirujuk revisi terbit.
+
+Daftar CMS memfilter judul, status dan bidang dari revisi terbaru. Kanal kontak lama tetap kosong jika belum diisi; editor hanya memasukkan kanal yang sudah diverifikasi, dan perubahan baru tampil publik setelah persetujuan.
 
 Markdown terbatas mendukung paragraf, heading `##`, daftar `-`, `**tebal**`, serta tautan HTTPS/path lokal. Raw HTML tidak dieksekusi. Unggahan hanya JPEG/PNG/WebP diam, maksimal 5 MB dan 20 megapiksel.
 
@@ -105,13 +107,19 @@ Suite menolak `PLAYWRIGHT_BASE_URL` dan tidak memakai ulang server dev. Petunjuk
 
 Regresi fokus dialog/menu, skip link, validasi CMS/ganti sandi/akun, gulir keyboard tabel/percakapan FAQ, reflow dan jarak teks dicatat di [docs/AKSESIBILITAS.md](docs/AKSESIBILITAS.md). Kesalahan terkait kolom dengan fokus menuju masalah dan input bertahan ketika tindakan ditolak, termasuk kolom khusus profil/regulasi serta daftar jenjang/tugas/kompetensi. Formulir akun mengikuti pilihan tersimpan sesudah simpan/reset; nilai akses rusak ditolak. Hasil akun serta simpan/ajukan/putuskan/tarik konten menerima fokus. Pesan konten bertahan saat formulir/rute berganti dan dibersihkan ketika tindakan baru atau navigasi.
 
-**Pemeriksaan terbaru, 9 November 2026:** keputusan CMS pada zoom tab asli 200% dengan jarak teks normal/diperbesar lulus di 720/320 CSS px: **52 state, 24 screenshot ditinjau**, minimum teks 5,35:1, batas kontrol 3,48:1 dan fokus 5,47:1. Pelepasan gambar membersihkan error dan memulihkan fokus; textarea penarikan tetap terlihat saat menerima fokus. Regresi penolakan berkas/penggantian/sesi dan **50/50 E2E, lint/typecheck serta build produksi terisolasi lulus**. Hasil serta batas ada di [docs/VERIFICATION.md](docs/VERIFICATION.md).
+**Pemeriksaan terbaru, 10 November 2026 — audit prioritas:** filter CMS diperbaiki agar memakai revisi terbaru; kanal Kontak URL/email/telepon dan jam opsional kini tersedia melalui editor/pratinjau/persetujuan. **21/21 unit, 49/49 integrasi, 4/4 E2E terarah, typecheck dan build produksi terisolasi lulus.** Dua screenshot region Kontak pada viewport 320/1440 CSS px ditinjau. Suite penuh 56 kasus tidak diulang. Hasil serta batas ada di [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+Urutan kerja aktif dan pemetaan kebutuhan ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Paket berikutnya adalah pemulihan sesi habis/konflik di CMS (FR-18). Pengujian aksesibilitas yang sudah lulus dibuka kembali bila ada perubahan terkait atau cacat yang dapat direproduksi; pemeriksaan manual/staging/UAT tetap gerbang rilis terpisah.
+
+Paket textarea FAQ sebelumnya pada 10 November mempertahankan spasi/baris baru dan menandai URL yang ditolak. **18/18 unit, 46/46 integrasi, 52/52 E2E, typecheck dan build terisolasi lulus** pada kode sebelum audit ini.
+
+Paket keputusan CMS 9 November memakai zoom tab asli 200% dengan jarak teks normal/diperbesar di 720/320 CSS px: **52 state, 24 screenshot ditinjau**, minimum teks 5,35:1, batas kontrol 3,48:1 dan fokus 5,47:1. Pelepasan gambar membersihkan error dan memulihkan fokus; textarea penarikan tetap terlihat saat menerima fokus. **50/50 E2E, lint/typecheck serta build produksi terisolasi lulus** pada kode paket itu.
 
 Paket akun/ganti sandi/FAQ/unggahan sebelumnya mencakup 76 state dan 32 screenshot zoom; aksi akun juga sudah berhenti mengirim ulang state sandi sementara. Hasil 48/48 E2E pada paket itu mendahului perubahan terbaru.
 
 **Paket zoom tab asli 200% dan kontras profil/regulasi lulus pada 6 November 2026:** 28 pengukuran state di 720/320 CSS px, 20 screenshot ditinjau, lint CSS dan build terisolasi lulus. Dua warna border diperbaiki agar melewati 3:1; rasio minimum sampel aktif adalah 5,80:1 untuk teks, 3,20:1 untuk batas kontrol dan 5,04:1 untuk fokus. Hasil ini mendahului CSS 9 November.
 
-Hasil 18/18 unit dan 45/45 integrasi tetap historis, tidak diulang untuk perubahan komponen/argumen state yang diabaikan server. Hasil 46/46 E2E juga mendahului paket terbaru. Pembaca layar nyata, seluruh hover/indikator native/state aksesibilitas, variasi detail CMS serta perangkat nyata masih perlu diperiksa; bukan klaim WCAG atau UAT selesai.
+Hasil 45/45 integrasi dan 46/46 E2E mendahului paket terbaru. Pembaca layar nyata, seluruh hover/indikator native/state aksesibilitas, variasi detail CMS serta perangkat nyata masih perlu diperiksa; bukan klaim WCAG atau UAT selesai.
 
 ## Produksi dan perbedaan dari default PRD
 
