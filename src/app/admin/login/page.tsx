@@ -21,12 +21,12 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
         </div>
       </div>
             <div>
-              <h2>Admin datang 😹
-              </h2>
+              {/* <h2>Admin datang 😹 */}
+              {/* </h2> */}
 
               <p>Susun materi, tinjau sumber, dan terbitkan pengetahuan melalui proses persetujuan.
               </p>
-              <img src="/assets/admint-sayang.jpg" alt=""/>
+              {/* <img src="/assets/admint-sayang.jpg" alt=""/> */}
 
             </div>
             <div>
