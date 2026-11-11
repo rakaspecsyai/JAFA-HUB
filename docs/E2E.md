@@ -16,6 +16,8 @@ PLAYWRIGHT_PORT=5185 npm run test:e2e
 
 ## Isolasi dan fixture
 
+**Pemeriksa native C2 terpisah, 11 November 2026:** `node --import tsx tests/operational/native-runtime.check.ts` menjalankan image produksi, PostgreSQL native dan HTTPS loopback dengan fixture baru. **Lulus, exit 0**: login/cookie/sesi, tiga peran, penolakan persetujuan sendiri setelah perubahan peran, publikasi/penarikan, revisi draf berikutnya serta media bersama. Resource uji dibersihkan. Hasil ini tidak menambah atau mengulang 60 kasus suite PGlite di bawah; cara menjalankan, artefak privat dan batas staging/UAT ada di [RUNTIME.md](RUNTIME.md) dan [VERIFICATION.md](VERIFICATION.md).
+
 `scripts/e2e-server.ts` membuat direktori `jafa-e2e-*` di direktori sementara sistem untuk database dan media. Harness menetapkan `JAFA_LOCAL_DATABASE_DIRECTORY`, mematikan pratinjau, serta mengganti konfigurasi database, origin, kunci rate limit, dan rahasia Better Auth untuk proses uji. `.env` asli tidak disalin/diubah dan `.local/development-pg` tidak dibuka oleh harness. Dependensi terpasang dipakai melalui symlink; root Turbopack hanya disesuaikan pada salinan config.
 
 Database dimulai kosong. Tiga akun fiktif beralamat `.invalid` dibuat sebagai editor, penyetuju, dan admin akun; kredensial di `tests/e2e/accounts.ts` hanya berlaku pada database sementara ini. Sebanyak 29 materi prototipe diimpor sebagai draf, kemudian diajukan oleh editor dan disetujui penyetuju melalui fungsi workflow untuk menyediakan fixture rute publik. Admin sintetis dipakai untuk memeriksa halaman pengguna. Persetujuan fixture bukan persetujuan substansi instansi.

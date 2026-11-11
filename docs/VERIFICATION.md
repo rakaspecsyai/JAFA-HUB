@@ -1,5 +1,23 @@
 # Verifikasi implementasi
 
+## C2: runtime native melalui HTTPS lokal — 11 November 2026
+
+`tests/operational/native-runtime.check.ts` ditambahkan untuk paket teknis berikutnya pada status pengembangan. Kode produk, dependensi, migrasi, aturan peran/persetujuan dan data pengguna tidak berubah. Pemeriksa membuat project Compose acak, database/media kosong, tiga akun sintetis `.invalid` serta proxy HTTPS loopback; sertifikat sementara hanya dipercaya oleh context browser uji. Docker Desktop yang awalnya mati dinyalakan, lalu CLI Windows mengakses engine Linux lokal. Tidak memakai PGlite atau target staging/server yang sudah berjalan.
+
+| Pemeriksaan | Hasil aktual dan batas |
+| --- | --- |
+| Tipe/build | Typecheck mandiri lulus. Kedua image dibangun; build produksi akhir mengompilasi dalam 10,0 detik, TypeScript 19,4 detik, lalu menyelesaikan pembentukan rute/optimasi. Pemeriksaan tipe tetap aktif |
+| Autentikasi/sesi | Login ketiga peran melalui formulir/Server Action HTTPS; cookie `__Secure-jafa_session`, Secure/HttpOnly/SameSite=Lax/path `/`, hash token di PostgreSQL, IP/UA kosong serta expiry dalam rentang waktu login + delapan jam lulus. Registrasi 403, kredensial salah 401 dan origin login asing 403 |
+| Peran dan konflik kepentingan | Halaman terlarang 403. Request Server Action simpan/terbit/tarik diputar ulang memakai peran yang salah dan ditolak; simpan anonim ditolak. Admin mengubah editor menjadi penyetuju melalui CMS: sesi lama tidak berlaku, login baru tetap tidak dapat menyetujui revisinya sendiri. Peran dipulihkan melalui CMS sebelum publikasi sah |
+| Gambar | Unggahan PNG melalui editor benar-benar menjadi WebP 24×16 tanpa EXIF/ICC. Media draf 404 bagi anonim/admin dan 200 bagi editor/penyetuju. Unggahan penyetuju/admin 403 |
+| Publikasi/penarikan | Artikel pertama disimpan/diajukan/diterbitkan melalui CMS. Detail/daftar/pencarian/sitemap berubah sesuai versi terbit; draf berikutnya tidak menggantinya. Artikel kedua memakai layanan draf/pengajuan untuk fixture media bersama, lalu diterbitkan/ditarik lewat browser. Penarikan pertama tetap membolehkan gambar publik, penarikan terakhir membuatnya 404; editor/penyetuju tetap dapat membaca |
+| Audit dan sesi akhir | Dua event publikasi dan dua penarikan tersimpan; penunjuk publik/proyeksi akhir kosong. Logout melalui CMS menolak replay cookie lama. Expiry sesi editor di DB fixture membuat dashboard redirect login dan media privat 404 |
+| Hasil/cleanup | **Pemeriksa akhir exit 0**, lima fase lulus. `.local/native-runtime-Eqi7dR/result.json`: `passed=true`, `isolatedResourcesRemoved=true`; container/network/volume project `jafa-native-check-7319979a3d60` tidak tersisa. Image/cache dipertahankan, rahasia/kunci TLS temporer dihapus |
+
+Dua percobaan awal berhenti pada pemeriksa, lalu diperbaiki tanpa melonggarkan aturan produk: (1) batas expiry dibandingkan dengan `createdAt`, padahal Better Auth mengisinya sebelum hook aplikasi menghitung expiry kembali; pemeriksa sekarang mengukur rentang waktu login nyata, (2) locator Slug terlalu ketat terhadap nama aksesibel yang menyertakan petunjuk; nama tanggal disesuaikan menjadi “Tanggal tinjauan materi”. Resource kedua percobaan dibersihkan. Artefak privat kegagalan ada di `.local/native-runtime-9oHz80/` dan `.local/native-runtime-d8wPcG/`; trace dapat memuat kredensial/sesi sintetis. Bukti akhir, log perintah/build dan typecheck berada di `.local/native-runtime-Eqi7dR/`.
+
+Ini satu pemeriksa operasional C2, **bukan hasil ulang suite 60 E2E atau suite unit/integrasi PGlite**. HTTPS memakai sertifikat fixture yang dipercaya hanya context uji; domain/proxy/sertifikat/forwarding IP/cache staging resmi belum dibuktikan. Tidak menunggu delapan jam secara nyata, mengulang seluruh variasi reset/nonaktif akun native, menguji CSRF Server Actions lintas origin, beban, backup/restore, aksesibilitas, audit independen atau UAT. `.env`, database/media pengguna serta cadangan lama tidak dibuka. Perintah dan batas pengulangan ada di [RUNTIME.md](RUNTIME.md).
+
 ## C1: persiapan runtime — bukti 10 November, ditutup 11 November 2026
 
 Pekerjaan yang terinterupsi dilanjutkan dengan meninjau sumber, hasil uji dan cleanup yang sudah tersimpan. Tidak ada rerun build, unit, container atau database yang telah lulus. Paket menyediakan Dockerfile/Compose, template konfigurasi kosong, role PostgreSQL aplikasi non-superuser, volume terpisah, profil maintenance dan pemeriksa startup; prosedur ada di [RUNTIME.md](RUNTIME.md). `npm start` kini memakai pemeriksa, sedangkan `npm run dev` tidak berubah. Migrasi, impor, bootstrap dan pemulihan tetap perintah manual.

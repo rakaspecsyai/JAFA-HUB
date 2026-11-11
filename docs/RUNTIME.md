@@ -2,7 +2,7 @@
 
 Paket ini menyediakan artefak dan prosedur untuk satu aplikasi Node.js, PostgreSQL native, dan volume media persisten. Tidak menetapkan penyedia hosting, domain, petugas, atau persetujuan produksi. Bukti pemeriksaan aktual berada di [VERIFICATION.md](VERIFICATION.md); pekerjaan kesiapan/rilis tetap di [KESIAPAN-RILIS.md](KESIAPAN-RILIS.md).
 
-**C1 selesai lokal, ditutup 11 November 2026.** Hasil 10 November: 25 unit, typecheck, smoke produksi, build kedua image, migrasi/impor idempoten PostgreSQL native, health dan restart/persistensi lulus. Pengguna aplikasi belum dibuat pada uji native; login akun, publikasi, otorisasi media melalui HTTPS serta staging/UAT belum diuji. Setelah interupsi, hasil dan kesesuaian sumber ditinjau tanpa mengulang pemeriksaan yang sudah lulus.
+**C1 dan C2 selesai lokal.** C1 memakai bukti 10 November: 25 unit, typecheck, smoke produksi, build kedua image, migrasi/impor idempoten PostgreSQL native, health dan restart/persistensi lulus. C2 pada 11 November menambahkan login/sesi, tiga peran, publikasi/penarikan serta otorisasi media melalui HTTPS fixture lokal; pemeriksa exit 0 dan cleanup lulus. Staging resmi dan UAT tetap terbuka; rincian hasil di [VERIFICATION.md](VERIFICATION.md).
 
 ## Isi paket
 
@@ -88,6 +88,27 @@ node --import tsx tests/operational/production.check.ts
 ```
 
 Smoke produksi membangun salinan kode/cache, menjalankan mode produksi dengan direktori media sementara, memeriksa origin runtime pada robots, halaman login, health 503 aman ketika peer database sengaja menutup koneksi, lalu meneruskan SIGTERM dan memastikan server berhenti. Ini bukan bukti login/sesi/publikasi PostgreSQL native atau staging. Hasil image/database yang benar-benar dijalankan dicatat terpisah di VERIFICATION.md.
+
+## C2: alur native melalui HTTPS lokal
+
+Pemeriksa berikut membuat project Compose dengan nama acak, membangun image sumber saat ini, menerapkan migrasi pada PostgreSQL baru dan membuat tiga akun `.invalid` dari fixture E2E. Pemeriksa tidak menerima target server/database eksternal. Memerlukan Docker Linux yang aktif, OpenSSL, dependensi proyek dan Chromium Playwright terpasang, serta izin socket loopback.
+
+```bash
+node --import tsx tests/operational/native-runtime.check.ts
+```
+
+Pada WSL tanpa integrasi CLI Linux, pilih executable Windows yang dapat mengakses engine lokal. Pemeriksa menerjemahkan path Compose/fixture menggunakan `wslpath`:
+
+```bash
+JAFA_TEST_DOCKER='/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe' \
+  node --import tsx tests/operational/native-runtime.check.ts
+```
+
+Proxy HTTPS sementara mempertahankan host/origin dan menimpa header forwarded sebelum meneruskan ke aplikasi produksi pada loopback. Sertifikat lokal hanya dipercaya oleh context browser uji; trust store host tidak berubah. Rahasia Compose serta kunci sertifikat dibuat acak di direktori temporer privat dan dihapus setelah pemeriksaan. Cookie produksi tetap Secure. Ini memeriksa terminasi TLS lokal, bukan konfigurasi proxy/domain/sertifikat staging resmi.
+
+Alur browser memakai login Server Action, unggahan dan sanitasi gambar, simpan/ajukan/terbit/tarik. Request aksi diputar ulang dengan sesi peran yang salah; perubahan peran mencabut sesi editor, dan akun kontributor yang kemudian menjadi penyetuju tetap ditolak saat mencoba menyetujui revisinya. Artikel kedua memakai layanan draf/pengajuan yang sama untuk menyiapkan rujukan gambar bersama, lalu diterbitkan dan ditarik melalui CMS. Draf berikutnya tidak mengganti versi publik; penarikan diperiksa pada detail, daftar, pencarian, sitemap serta akses gambar sampai rujukan terbit terakhir hilang. Logout dan expiry database juga memeriksa penggunaan ulang cookie lama.
+
+Hasil per fase dan cleanup tersimpan pada `.local/native-runtime-*/result.json`; `commands.log` dan trace kegagalan tetap privat karena dapat memuat kredensial/sesi sintetis. Pemeriksa menghentikan dan menghapus hanya container/network/volume project acak miliknya saat selesai atau gagal; image/cache build dipertahankan. Penghentian paksa proses/engine dapat menyisakan resource uji: periksa nama project pada hasil sebelum membersihkannya, jangan memakai prune global. Hasil lulus hanya dicatat setelah perintah benar-benar selesai; suite E2E PGlite, aksesibilitas, beban, backup/restore, UAT dan gerbang rilis tetap mempunyai bukti tersendiri.
 
 ## Rujukan resmi
 

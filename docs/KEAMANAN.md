@@ -2,6 +2,12 @@
 
 Tinjauan ini memeriksa kode autentikasi, sesi, origin, pembatasan laju, hak akses, media, dan workflow yang tersedia. Better Auth dan larangan keputusan bagi seluruh kontributor mengikuti pilihan pengguna 26 Oktober. Pemeriksaan dilakukan oleh agen pengembang pada workspace lokal; ini bukan audit keamanan independen, pentest infrastruktur, atau persetujuan produksi. Suite memakai akun, sandi, serta sesi sintetis terisolasi; status maintenance database pengembangan dicatat terpisah di [VERIFICATION.md](VERIFICATION.md).
 
+## Runtime native HTTPS lokal — 11 November 2026
+
+Pemeriksa C2 **lulus, exit 0** memakai image produksi dan PostgreSQL 17 baru. Login browser membuktikan cookie Secure/HttpOnly/SameSite=Lax, hash token dan expiry delapan jam; registrasi/origin login asing serta request Server Action dengan peran yang salah ditolak. Perubahan peran mencabut sesi dan kontributor yang menjadi penyetuju tetap ditolak saat memberi persetujuan sendiri. Media draf/terbit/ditarik mengikuti rujukan revisi, termasuk gambar bersama; logout dan expiry DB menolak replay cookie lama. Resource uji dibersihkan. Bukti, percobaan awal serta batas di [VERIFICATION.md](VERIFICATION.md).
+
+Sertifikat fixture dipercaya hanya oleh context uji. Konfigurasi proxy/header IP/cache pada host resmi, CSRF Server Actions lintas origin, persaingan admin, seluruh variasi reset/nonaktif native, beban, audit independen dan latihan pemulihan staging belum dibuktikan oleh C2.
+
 ## Variasi media dan keputusan — 9 November 2026
 
 Regresi browser baru memakai API nyata: MIME SVG dan isi PNG rusak ditolak 400, berkas lebih dari 5 MB ditolak 413, serta unggahan tanpa cookie sesi ditolak 401. Gambar lama/masukan tetap; login lewat tab lain memulihkan akses tanpa menavigasi draf. Media yang tidak dirujuk versi publik tetap 404 tanpa sesi. Penggantian dan pelepasan hanya mengubah referensi pada draf setelah simpan; tidak menghapus file permanen atau memintas persetujuan.
