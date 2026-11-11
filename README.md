@@ -109,9 +109,13 @@ Suite menolak `PLAYWRIGHT_BASE_URL` dan tidak memakai ulang server dev. Petunjuk
 
 Regresi fokus dialog/menu, skip link, validasi CMS/ganti sandi/akun, gulir keyboard tabel/percakapan FAQ, reflow dan jarak teks dicatat di [docs/AKSESIBILITAS.md](docs/AKSESIBILITAS.md). Kesalahan terkait kolom dengan fokus menuju masalah dan input bertahan ketika tindakan ditolak, termasuk kolom khusus profil/regulasi serta daftar jenjang/tugas/kompetensi. Formulir akun mengikuti pilihan tersimpan sesudah simpan/reset; nilai akses rusak ditolak. Hasil akun serta simpan/ajukan/putuskan/tarik konten menerima fokus. Pesan konten bertahan saat formulir/rute berganti dan dibersihkan ketika tindakan baru atau navigasi.
 
-**Pemeriksaan terbaru, 10 November 2026 — pemulihan CMS:** status error serta tautan masuk kembali/periksa akses/bandingkan versi tersedia dengan input tetap. **22/22 unit, 50/50 integrasi, 4/4 E2E terarah, typecheck dan build produksi terisolasi lulus.** Browser memeriksa login salah peran yang tetap ditolak, login editor yang memulihkan simpan, serta konflik dua akun editor dengan penggabungan manual. Suite penuh 60 kasus tidak diulang. Hasil serta batas ada di [docs/VERIFICATION.md](docs/VERIFICATION.md).
+**Status 11 November 2026 — persiapan runtime C1 selesai:** hasil uji 10 November menunjukkan **25/25 unit, typecheck, smoke produksi dan build kedua image lulus**. PostgreSQL native terisolasi lulus migrasi/impor idempoten, role non-superuser, health 200 serta persistensi data/marker media setelah restart. Sebanyak 29 materi tetap draf; tidak ada akun atau publikasi otomatis. Setelah interupsi, sumber dan bukti ditinjau tanpa mengulang tes yang sudah lulus. Batas ada di [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
-Urutan kerja aktif dan pemetaan kebutuhan ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Paket A (filter/Kontak) dan B (pemulihan CMS FR-18) selesai lokal. Berikutnya persiapan runtime produksi/native; bukti PostgreSQL native tetap memerlukan sarana. Pengujian aksesibilitas yang sudah lulus dibuka kembali bila ada perubahan terkait atau cacat yang dapat direproduksi; pemeriksaan manual/staging/UAT tetap gerbang rilis terpisah.
+Urutan kerja aktif ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Paket A, B dan C1 selesai lokal. Berikutnya C2: autentikasi/sesi, publikasi dan akses media pada runtime native melalui HTTPS. Suite integrasi/browser aplikasi tidak diulang pada C1; smoke database bukan bukti alur C2 atau UAT. Pengujian aksesibilitas yang sudah lulus dibuka kembali bila ada perubahan terkait atau cacat yang dapat direproduksi.
+
+**Rencana AI disetujui 11 November:** RAG dari PDF resmi peraturan JF dikembangkan paralel dengan C2 dan diaktifkan bertahap setelah evaluasi. Pengguna memilih API hosted berbiaya murah; model lokal/Rp0 untuk komponen AI tidak lagi menjadi arah. Sumber, persetujuan, kandidat model dan estimasi biaya ada di [PRD tambahan RAG](docs/PRD-RAG-Jafa-Hub.md). PDF, penyedia/cap final dan API key belum tersedia; panel saat ini tetap asisten FAQ terkurasi.
+
+Paket pemulihan CMS sebelumnya pada 10 November memeriksa login ulang dan konflik dua editor. **22/22 unit, 50/50 integrasi, 4/4 E2E terarah, typecheck dan build produksi terisolasi lulus** pada kode sebelum persiapan runtime.
 
 Paket audit prioritas sebelumnya memperbaiki filter revisi terbaru dan menambah kanal Kontak. **21/21 unit, 49/49 integrasi, 4/4 E2E terarah, typecheck dan build terisolasi lulus** pada kode sebelum pemulihan CMS.
 
@@ -126,6 +130,8 @@ Paket akun/ganti sandi/FAQ/unggahan sebelumnya mencakup 76 state dan 32 screensh
 Hasil 45/45 integrasi dan 46/46 E2E mendahului paket terbaru. Pembaca layar nyata, seluruh hover/indikator native/state aksesibilitas, variasi detail CMS serta perangkat nyata masih perlu diperiksa; bukan klaim WCAG atau UAT selesai.
 
 ## Produksi dan perbedaan dari default PRD
+
+Paket yang dapat ditinjau tersedia pada [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), serta [template konfigurasi](deploy/runtime.env.example); urutan build/check/migrate/import/bootstrap/start ada di [docs/RUNTIME.md](docs/RUNTIME.md). `npm start` kini memeriksa konfigurasi dan menolak `.env`/`.local` dalam artefak; `npm run dev` tetap jalur pengembangan. Gunakan salinan rilis bersih, jangan menghapus data pengembangan untuk melewati pemeriksaan. Migrasi/impor/bootstrap tidak berjalan otomatis saat server dimulai.
 
 Gunakan PostgreSQL native, HTTPS, dan volume media persisten. Set `JAFA_LOCAL_DATABASE=false`, `JAFA_CONTENT_PREVIEW=false`, `APP_URL` ke domain nyata, serta `AUTH_RATE_LIMIT_KEY` dan `BETTER_AUTH_SECRET` ke nilai acak unik per lingkungan. Tetapkan `MEDIA_DIRECTORY` ke direktori volume di luar artefak build. Petunjuk lengkap ada di [docs/OPERASIONAL.md](docs/OPERASIONAL.md).
 
