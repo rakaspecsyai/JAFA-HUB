@@ -1,5 +1,5 @@
 import { professions, articles, regulations, chatTopics, sources } from "../../data/legacy-content.mjs";
-import { payloadSchema, type Kind, type PublicContent, type Source } from "./content-types";
+import { payloadSchema, type PublicKind, type PublicContent, type Source } from "./content-types";
 
 const review = "2026-10-21";
 const articleTitles: Record<string, string> = {
@@ -9,7 +9,7 @@ const articleTitles: Record<string, string> = {
   "memahami-konversi-angka-kredit": "Memahami konversi Angka Kredit"
 };
 const source = (title: string, url: string): Source => ({ title, url, reviewedOn: review });
-const entry = (kind: Kind, slug: string, payload: unknown, tags: string[], refs: Source[]): PublicContent => ({
+const entry = (kind: PublicKind, slug: string, payload: unknown, tags: string[], refs: Source[]): PublicContent => ({
   id: `prototype-${kind}-${slug}`, revisionId: `prototype-${kind}-${slug}-1`, kind, slug,
   payload: payloadSchema.parse(payload), reviewedOn: review, publishedAt: null, professions: tags, sources: refs
 });

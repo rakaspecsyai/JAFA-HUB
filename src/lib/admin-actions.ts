@@ -58,18 +58,18 @@ export async function decisionAction(_: ActionState, form: FormData): Promise<Ac
     const input = revisionSchema.extend({ decision: z.enum(["publish", "return"]), note: z.string() }).safeParse(Object.fromEntries(form));
     if (!input.success) throw new AppError("Keputusan atau identitas revisi tidak sesuai.");
     const { itemId, revisionId, version, decision, note } = input.data;
-    await reviewRevision(await requireStaff(["approver"]), itemId, revisionId, version, decision, note);
+    const { kind } = await reviewRevision(await requireStaff(["approver"]), itemId, revisionId, version, decision, note);
     revalidatePath("/", "layout");
-    return { ok: true, message: decision === "publish" ? "Revisi berhasil diterbitkan." : "Revisi dikembalikan kepada editor." };
+    return { ok: true, message: decision === "publish" ? kind === "knowledge" ? "Sumber disetujui untuk tahap indeks. PDF tetap privat." : "Revisi berhasil diterbitkan." : "Revisi dikembalikan kepada editor." };
   } catch (error) { return publicError(error); }
 }
 export async function withdrawAction(_: ActionState, form: FormData): Promise<ActionState> {
   try {
     const parsed = z.object({ itemId: z.uuid(), publishedRevisionId: z.uuid(), note: z.string(), archive: z.string().optional() }).safeParse(Object.fromEntries(form));
     if (!parsed.success) throw new AppError("Isi alasan penarikan dan periksa identitas konten.");
-    await withdrawContent(await requireStaff(["approver"]), parsed.data.itemId, parsed.data.publishedRevisionId, parsed.data.note, parsed.data.archive === "on");
+    const { kind } = await withdrawContent(await requireStaff(["approver"]), parsed.data.itemId, parsed.data.publishedRevisionId, parsed.data.note, parsed.data.archive === "on");
     revalidatePath("/", "layout");
-    return { ok: true, message: "Konten berhasil ditarik dari portal publik." };
+    return { ok: true, message: kind === "knowledge" ? "Sumber ditarik dari korpus. PDF dan riwayat tetap privat." : "Konten berhasil ditarik dari portal publik." };
   } catch (error) { return publicError(error); }
 }
 export async function userAction(_: ActionState, form: FormData): Promise<ActionState> {

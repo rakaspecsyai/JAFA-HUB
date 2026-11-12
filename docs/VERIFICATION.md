@@ -1,5 +1,26 @@
 # Verifikasi implementasi
 
+## R2a: sumber PDF privat dan persetujuan — 12 November 2026
+
+Implementasi menambah jenis `knowledge`, tiga tabel dokumen, endpoint PDF terpisah dari gambar, worker PDF.js **6.5.438**, serta modul CMS **Sumber PDF**. Revisi dan persetujuan memakai layanan/contributor/audit yang sama. PDF tetap privat sesudah persetujuan, tidak mempunyai URL portal, dan tidak masuk proyeksi pencarian/sitemap atau hitungan konten terbit. Tidak ada pgvector, embedding, retrieval atau API generatif yang diaktifkan. Panduan di [DOKUMEN-PDF.md](DOKUMEN-PDF.md).
+
+| Pemeriksaan | Hasil aktual dan batas |
+| --- | --- |
+| Unit | **27/27 lulus**, exit 0; termasuk dua kasus PDF yang memeriksa halaman/teks/checksum, halaman minim teks, MIME/isi rusak, >20 MiB, >500 halaman, JavaScript dan AES-256 dengan password pembaca biasa/kosong. Sumber PDF juga ditolak oleh pembentuk URL publik |
+| Integrasi | **53/53 lulus**, exit 0; unggah dan rollback audit/file, metadata/halaman/relasi revisi, konfirmasi editor, penolakan OCR, revisi disetujui tetap utuh setelah PDF diganti, penarikan, query publik dan proyeksi palsu. HTTP auth fixture memeriksa origin/peran/sesi, pratinjau/file 404 bagi anonim/admin, attachment/sandbox/no-store serta byte file untuk editor/penyetuju |
+| Backup/restore lokal | Termasuk dalam suite: seluruh **18 tabel** dibandingkan setelah restore fisik dan byte gambar/PDF di subdirektori media sama. Ini memakai PGlite temporer, bukan job backup terenkripsi atau restore staging |
+| Browser | **2/2 terarah lulus** pada desktop 1440 dan mobile 320 CSS px: koreksi PDF palsu/pindai, input bertahan, tinjauan wajib, pergantian halaman dan fokus ke teks baru, simpan/ajukan, persetujuan petugas berbeda, draf berikutnya serta penarikan; endpoint PDF tetap privat dan jenis sumber tidak ditawarkan pencarian publik. Batas kasus 120 detik; suite penuh lama tidak diulang |
+| Tipe | Typecheck mandiri final lulus, exit 0, dengan pemeriksaan tipe tetap aktif |
+| Image/build | Kedua image dibangun, build Next produksi lulus: kompilasi 7,3 detik, TypeScript 12,4 detik, pembentukan rute dan optimasi. Dependency PDF.js dari lockfile dan worker sumber tersedia pada image runtime |
+| Native HTTPS | Pemeriksa yang sudah ada ditambah fase PDF; **exit 0, enam fase lulus**. PostgreSQL 17 baru dengan role non-superuser menerima tiga migrasi; upload PDF dua halaman, worker produksi, teks/halaman, persetujuan/penarikan, file 404 bagi anonim/admin setelah disetujui serta dashboard terbit tetap 0 dibuktikan lewat HTTPS fixture. Lima fase regresi C2 juga lulus pada kode baru |
+| Isolasi/cleanup | `.local/native-runtime-fdXKTv/result.json`: `passed=true`, `isolatedResourcesRemoved=true`; container/network/volume project `jafa-native-check-36ebd4d662b3` dibersihkan. Image/cache dipertahankan. `.env`, database/media dan cadangan pengguna tidak diubah; database pengembangan tidak dibuka/dimigrasikan. Rahasia/kunci TLS fixture temporer dihapus |
+
+Percobaan integrasi awal **52/53** berhenti karena fixture backup mengharapkan 15 tabel. Fixture kemudian diisi dengan dokumen/halaman/relasi dan memeriksa 18 tabel; **4/4 backup terarah**, kemudian **53/53 penuh** lulus. Percobaan browser awal **0/2** berhenti pada locator alert yang turut cocok dengan announcer Next; locator dibatasi ke `main`. Pengulangan **2/2** lulus. Capture persetujuan mobile awal masih berada pada gulir animasi; pengulangan **2/2 lulus**, exit 0, dengan reduced motion dan status utuh di viewport. Empat screenshot akhir editor/persetujuan di 320/1440 CSS px ditinjau, teks/checksum membungkus dan status terlihat. Tidak menaikkan timeout atau mengubah produk untuk melewati kasus gagal.
+
+Artefak privat `.local/pdf-r2a-8h50vr2c/` menyimpan log unit/integrasi/typecheck, `e2e/` awal, `e2e-final/`, `e2e-capture/` akhir serta `native.log`; build/perintah dan hasil native berada pada `.local/native-runtime-fdXKTv/`. Trace dapat berisi sesi/kredensial sintetis. Fixture teks dan dua PDF AES-256 seluruhnya sintetis; belum ada PDF peraturan milik pengguna.
+
+R2a membuktikan alur korpus privat, **R2 penuh belum selesai**. Indeks/extension vector, antrean embedding/cache/retry, retrieval dan pemeriksaan kelayakan sebelum jawaban masih R2b/R3. Heuristik <20 huruf per halaman dapat memblokir halaman kosong yang disengaja; tabel, kolom, simbol dan susunan pasal perlu pembandingan manual serta kalibrasi pada PDF resmi. Batas heap worker bukan batas seluruh memori host; tidak ada klaim uji beban/semua PDF berbahaya. Suite penuh 62 E2E, pembaca layar, audit independen, domain/proxy resmi, backup staging dan UAT belum diperiksa oleh paket ini.
+
 ## C2: runtime native melalui HTTPS lokal — 11 November 2026
 
 `tests/operational/native-runtime.check.ts` ditambahkan untuk paket teknis berikutnya pada status pengembangan. Kode produk, dependensi, migrasi, aturan peran/persetujuan dan data pengguna tidak berubah. Pemeriksa membuat project Compose acak, database/media kosong, tiga akun sintetis `.invalid` serta proxy HTTPS loopback; sertifikat sementara hanya dipercaya oleh context browser uji. Docker Desktop yang awalnya mati dinyalakan, lalu CLI Windows mengakses engine Linux lokal. Tidak memakai PGlite atau target staging/server yang sudah berjalan.

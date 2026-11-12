@@ -68,6 +68,7 @@ Jika semua admin kehilangan akses, petugas teknis memakai `npm run admin:recover
 - `/simulasi`: konversi lokal tanpa pengiriman input ke server, rincian rumus, validasi, reset, dan tabel baseline.
 - `/tentang`, `/kontak`, `/privasi`: halaman pendukung tetap melalui persetujuan. Kontak mendukung kanal website/email/telepon dan jam layanan opsional dari CMS.
 - `/admin`: dashboard dan modul CMS, revisi, persetujuan, pengguna, aktivitas.
+- `/admin/dokumen`: sumber PDF privat, ekstraksi per halaman dan persetujuan; persetujuan belum mengaktifkan indeks/AI. Panduan dan batas ada di [docs/DOKUMEN-PDF.md](docs/DOKUMEN-PDF.md).
 - `/api/health`, `sitemap.xml`, `robots.txt`: pemeriksaan layanan dan metadata publik.
 
 Revisi kerja terpisah dari penunjuk publik. Pengajuan mengunci isi; simpan versi basi ditolak. Keputusan, proyeksi pencarian, dan audit disimpan dalam satu transaksi. Media unggahan disimpan di luar `public/`, diperiksa isinya, dibersihkan metadata, dan hanya dapat dibaca publik selama dirujuk revisi terbit.
@@ -113,7 +114,9 @@ Regresi fokus dialog/menu, skip link, validasi CMS/ganti sandi/akun, gulir keybo
 
 **C2 selesai lokal 11 November:** pemeriksa runtime produksi + PostgreSQL native + HTTPS loopback **lulus, exit 0**, disertai typecheck dan build image. Login/cookie/sesi, batas tiga peran, larangan persetujuan sendiri sesudah perubahan peran, publikasi/penarikan, draf berikutnya dan media bersama diperiksa dengan fixture sintetis; container/network/volume uji dibersihkan. Pemeriksa dan cara mengulang ada di [docs/RUNTIME.md](docs/RUNTIME.md); bukti serta batas di [docs/VERIFICATION.md](docs/VERIFICATION.md). Ini belum membuktikan konfigurasi staging resmi atau UAT.
 
-Urutan kerja aktif ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Paket A, B, C1 dan C2 selesai lokal; pengembangan berikutnya R2 untuk ingest PDF privat dan kelayakan indeks. Suite integrasi/browser PGlite serta aksesibilitas lama tidak diulang pada C2. Buka paket yang sudah lulus kembali bila ada perubahan terkait atau cacat yang dapat direproduksi.
+**R2a, 12 November:** modul PDF privat sudah mengelola unggah, ekstraksi/halaman, revisi dan persetujuan sumber. **27 unit, 53 integrasi, dua browser PDF, typecheck, build image dan enam fase pemeriksa native HTTPS lulus.** PDF tetap privat setelah persetujuan; teks tidak dikirim ke AI. Skema menambah enum/tiga tabel melalui migrasi tambahan, dan pengujian memakai fixture terisolasi tanpa memigrasikan database pengembangan pengguna. Batas PDF, prosedur dan pekerjaan indeks tersisa ada di [docs/DOKUMEN-PDF.md](docs/DOKUMEN-PDF.md).
+
+Urutan kerja aktif ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Berikutnya R2b untuk indeks/retrieval; R2 penuh dan AI belum selesai. Buka paket yang sudah lulus kembali bila ada perubahan terkait atau cacat yang dapat direproduksi.
 
 **Rencana AI disetujui 11 November:** RAG dari PDF resmi peraturan JF dikembangkan paralel dengan C2 dan diaktifkan bertahap setelah evaluasi. Pengguna memilih API hosted berbiaya murah; model lokal/Rp0 untuk komponen AI tidak lagi menjadi arah. Sumber, persetujuan, kandidat model dan estimasi biaya ada di [PRD tambahan RAG](docs/PRD-RAG-Jafa-Hub.md). PDF, penyedia/cap final dan API key belum tersedia; panel saat ini tetap asisten FAQ terkurasi.
 

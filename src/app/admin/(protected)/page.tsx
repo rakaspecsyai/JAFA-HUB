@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireStaff } from "@/lib/auth";
-import { dateLabel } from "@/lib/content-types";
+import { dateLabel, PUBLIC_KINDS } from "@/lib/content-types";
 import { ContentTable } from "@/components/admin-content";
 import s from "@/components/admin.module.css";
 export const metadata = { title: "Dashboard" };
@@ -10,7 +10,7 @@ export default async function Dashboard() {
   const [users, total, drafts, submitted, published, recent, activities] = await Promise.all([
     staff.role === "admin" ? db.user.groupBy({ by: ["role"], _count: true, where: { active: true } }) : Promise.resolve([]),
     db.contentItem.count(), db.contentRevision.count({ where: { status: { in: ["draft", "returned"] } } }),
-    db.contentRevision.count({ where: { status: "submitted" } }), db.contentItem.count({ where: { publishedRevisionId: { not: null }, archived: false } }),
+    db.contentRevision.count({ where: { status: "submitted" } }), db.contentItem.count({ where: { kind: { in: [...PUBLIC_KINDS] }, publishedRevisionId: { not: null }, archived: false } }),
     staff.role !== "admin" ? db.contentItem.findMany({ where: staff.role === "approver" ? { revisions: { some: { status: "submitted" } } } : {}, orderBy: { updatedAt: "desc" }, take: 5, include: { revisions: { orderBy: { number: "desc" }, take: 1 } } }) : Promise.resolve([]),
     db.auditEvent.findMany({ where: staff.role === "admin" ? {} : { action: { startsWith: "content." } }, orderBy: { createdAt: "desc" }, take: 5 })
   ]);

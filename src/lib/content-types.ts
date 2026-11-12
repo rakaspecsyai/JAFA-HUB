@@ -4,8 +4,11 @@ export const PROFESSION_KEYS = ["pp", "plb", "pelelang"] as const;
 export const professionNames: Record<string, string> = {
   pp: "Penilai Pemerintah", plb: "Penata Laksana Barang", pelelang: "Pelelang"
 };
-export const kindLabels = { profession: "Profil JF", article: "Artikel", regulation: "Regulasi", faq: "FAQ", page: "Halaman" };
-export const moduleKinds = { "profil-jf": "profession", artikel: "article", regulasi: "regulation", faq: "faq", halaman: "page" } as const;
+export const PUBLIC_KINDS = ["profession", "article", "regulation", "faq", "page"] as const;
+export type PublicKind = typeof PUBLIC_KINDS[number];
+export const kindLabels = { profession: "Profil JF", article: "Artikel", regulation: "Regulasi", faq: "FAQ", page: "Halaman", knowledge: "Sumber PDF" };
+export const moduleKinds = { "profil-jf": "profession", artikel: "article", regulasi: "regulation", faq: "faq", halaman: "page", dokumen: "knowledge" } as const;
+export const regulationStatuses = { unverified: "Belum diverifikasi", current: "Berlaku", amended: "Diubah", revoked: "Dicabut" };
 export type Kind = keyof typeof kindLabels;
 export type Staff = { id: string; name: string; email: string; role: "editor" | "approver" | "admin"; mustChangePassword: boolean };
 export type Source = { title: string; url?: string | null; internalRef?: string | null; publisher?: string; reviewedOn: string };
@@ -27,16 +30,20 @@ export const payloadSchema = z.object({
   relatedLinks: z.array(z.object({ label: z.string().max(200), href: z.string().max(2000) })).max(20).default([]),
   contactChannels: z.array(z.object({ type: z.enum(["url", "email", "phone"]), label: z.string().trim().max(100), value: z.string().trim().max(2000) })).max(10).default([]),
   serviceHours: z.string().trim().max(500).default(""),
+  documentId: z.union([z.uuid(), z.literal("")]).default(""),
+  documentReviewed: z.boolean().default(false),
+  regulationStatus: z.enum(["unverified", "current", "amended", "revoked"]).default("unverified"),
   image: z.string().max(200).default(""), imageAlt: z.string().max(500).default(""),
   imageCredit: z.string().max(1000).default("")
 });
 export type Payload = z.infer<typeof payloadSchema>;
 export type ContactChannel = Payload["contactChannels"][number];
 export type PublicContent = {
-  id: string; revisionId: string; kind: Kind; slug: string; payload: Payload;
+  id: string; revisionId: string; kind: PublicKind; slug: string; payload: Payload;
   reviewedOn: string; publishedAt: string | null; professions: string[]; sources: Source[];
 };
-export function contentPath(kind: Kind, slug: string) {
+export function contentPath(kind: PublicKind, slug: string) {
+  if (!PUBLIC_KINDS.includes(kind)) throw new Error("Jenis konten ini tidak mempunyai URL publik.");
   return kind === "profession" ? `/informasi/${slug}` : kind === "article" ? `/insight/${slug}`
     : kind === "page" ? `/${slug}` : `/${kind === "faq" ? "faq" : "regulasi"}#${slug}`;
 }

@@ -13,6 +13,8 @@ import { createLocalDatabase } from "../../src/lib/local-db";
 import { credentialUser } from "../../src/lib/credentials";
 import { applyLocalMigrations } from "../../scripts/local-migrations";
 import { backupLocal, restoreLocal } from "../../scripts/local-backup";
+import { createHash } from "node:crypto";
+import { pdfFixture } from "../fixtures/pdf";
 
 async function temporary(t: TestContext) {
   const root = await mkdtemp(join(tmpdir(), "jafa-backup-check-"));
@@ -37,6 +39,7 @@ test("backup/restore database dan media mempertahankan seluruh ID, nilai, dan re
   const client = new PrismaClient({ adapter: new PrismaPg(local.pool) });
   let expected: Awaited<ReturnType<typeof allRows>>;
   const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "#183c52" } }).webp().toBuffer();
+  const pdf = pdfFixture(), pdfKey = `${"a".repeat(48)}.pdf`;
   try {
     await applyLocalMigrations(await local.engine);
     const editor = await client.user.create({ data: credentialUser({ name: "Editor uji", email: "editor@uji.invalid", role: "editor" }, "synthetic-backup-only") });
@@ -44,6 +47,10 @@ test("backup/restore database dan media mempertahankan seluruh ID, nilai, dan re
     await client.session.create({ data: { tokenHash: "synthetic-session-only", userId: editor.id, expiresAt: new Date("2026-12-01T00:00:00Z") } });
     const asset = await client.mediaAsset.create({ data: { storageKey: "synthetic.webp", mime: "image/webp", size: bytes.length, width: 2, height: 2, attribution: "Fixture backup", uploadedBy: editor.id } });
     await writeFile(join(media, asset.storageKey), bytes);
+    await mkdir(join(media, "documents")); await writeFile(join(media, "documents", pdfKey), pdf);
+    const document = await client.documentAsset.create({ data: { storageKey: pdfKey, checksum: createHash("sha256").update(pdf).digest("hex"), size: pdf.length, pageCount: 1, needsOcr: false, parserVersion: "synthetic-backup", uploadedBy: editor.id, pages: { create: { number: 1, text: "Teks halaman sintetis", checksum: createHash("sha256").update("Teks halaman sintetis").digest("hex") } } } });
+    const knowledge = await client.contentItem.create({ data: { kind: "knowledge", slug: "pdf-backup" } });
+    await client.contentRevision.create({ data: { itemId: knowledge.id, number: 1, reviewedOn: "2026-10-26", payload: { title: "PDF privat sintetis", documentId: document.id }, document: { create: { documentId: document.id } } } });
     const item = await client.contentItem.create({ data: { kind: "article", slug: "fixture-backup" } });
     const approved = await client.contentRevision.create({ data: {
       itemId: item.id, number: 1, status: "approved", reviewedOn: "2026-10-26", payload: { title: "Materi terbit sintetis", body: "Isi tetap tersimpan." },
@@ -58,7 +65,7 @@ test("backup/restore database dan media mempertahankan seluruh ID, nilai, dan re
     await client.auditEvent.create({ data: { actorId: approver.id, actorName: approver.name, action: "content.publish", objectId: item.id, revisionId: approved.id, note: "Fixture terisolasi, bukan persetujuan materi pengguna." } });
     await client.rateLimit.create({ data: { key: "synthetic-rate-limit", count: 2, expiresAt: new Date("2026-12-01T00:00:00Z") } });
     expected = await allRows(await local.engine);
-    assert.equal(Object.keys(expected).length, 15);
+    assert.equal(Object.keys(expected).length, 18);
     assert.ok(Object.entries(expected).every(([table, rows]) => table === "Verification" || rows.length > 0));
     await assert.rejects(backupLocal(pg, media, backup), /sedang digunakan/);
     await assert.rejects(readdir(backup), { code: "ENOENT" });
@@ -67,6 +74,7 @@ test("backup/restore database dan media mempertahankan seluruh ID, nilai, dan re
   assert.ok(count > 1);
   assert.equal(await restoreLocal(backup, restored), count);
   assert.deepEqual(await readFile(join(restored, "media", "synthetic.webp")), bytes);
+  assert.deepEqual(await readFile(join(restored, "media", "documents", pdfKey)), pdf);
   const restoredDatabase = createLocalDatabase(join(restored, "pg"));
   try { assert.deepEqual(await allRows(await restoredDatabase.engine), expected!); }
   finally { await restoredDatabase.close(); }

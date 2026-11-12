@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerSecurityTests } from "./security";
 import { AppError, publicError } from "../../src/lib/errors";
+import { pdfFixture } from "../fixtures/pdf";
 
 let memory: Awaited<ReturnType<typeof createMemoryPool>>;
 let db: PrismaClient;
@@ -31,7 +32,7 @@ before(async () => {
   memory = await createMemoryPool();
   await applyLocalMigrations(memory.engine);
   await applyLocalMigrations(memory.engine);
-  assert.equal((await memory.engine.query('SELECT * FROM "_prisma_migrations"')).rows.length, 2);
+  assert.equal((await memory.engine.query('SELECT * FROM "_prisma_migrations"')).rows.length, 3);
   db = new PrismaClient({ adapter: new PrismaPg(memory.pool) });
   (globalThis as unknown as { jafaDb: PrismaClient }).jafaDb = db;
   const passwordHash = await hashPassword("integration-password-123");
@@ -501,6 +502,61 @@ test("database lokal mempertahankan data setelah ditutup dan dibuka kembali", as
     local = createLocalDatabase(join(directory, "nested", "pg"));
     assert.equal((await local.pool.query("SELECT value FROM persistence_check")).rows[0].value, "tetap tersimpan");
   } finally { await local.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+test("PDF privat mengikuti revisi/persetujuan dan tidak masuk pembacaan publik", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "jafa-document-workflow-")), previousMedia = process.env.MEDIA_DIRECTORY;
+  process.env.MEDIA_DIRECTORY = directory;
+  try {
+    const { storeDocument, readDocumentFile } = await import("../../src/lib/documents");
+    const bytes = pdfFixture(), file = new File([bytes], "sintetis.pdf", { type: "application/pdf" });
+    for (const actor of [admin, approver, { ...editor, mustChangePassword: true }]) await assert.rejects(storeDocument(actor, file), { status: 403 });
+    const asset = await storeDocument(editor, file), stored = await db.documentAsset.findUniqueOrThrow({ where: { id: asset.id }, include: { pages: true } });
+    assert.deepEqual(await readDocumentFile(stored), bytes); assert.equal(stored.pages.length, 1);
+    const input = draft({ kind: "knowledge", payload: payloadSchema.parse({ title: "Sumber privat pdfworkflow", summary: "Ringkasan sumber sintetis", body: "", number: "UJI 1", year: "2026", publisher: "Instansi fixture", officialUrl: "https://www.djkn.kemenkeu.go.id/", statusNote: "Berlaku pada fixture; tidak ada perubahan terkait.", regulationStatus: "current", documentId: asset.id, documentReviewed: false }) });
+    let saved = await service.saveDraft(editor, input);
+    await assert.rejects(service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version), error => error instanceof AppError && !!error.fields?.documentReviewed);
+    input.payload.documentReviewed = true; saved = await service.saveDraft(editor, { ...input, ...saved });
+    await service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version);
+    await assert.rejects(service.saveDraft(editor, { ...input, ...saved, version: saved.version + 1 }), { status: 409 });
+    await service.reviewRevision(approver, saved.itemId, saved.revisionId, saved.version + 1, "publish", "PDF dan ekstraksi fixture diperiksa.");
+    assert.equal(await db.publishedSearchEntry.findUnique({ where: { itemId: saved.itemId } }), null);
+    assert.ok(!(await repository.listPublished()).items.some(item => item.id === saved.itemId));
+    // @ts-expect-error Request yang memalsukan jenis tetap harus ditolak saat runtime.
+    assert.equal(await repository.getPublished("knowledge", input.slug), null);
+    await db.publishedSearchEntry.create({ data: { itemId: saved.itemId, revisionId: saved.revisionId, kind: "article", title: "pdfworkflow", summary: "Tidak boleh bocor", text: "pdfworkflow", path: `/insight/${input.slug}`, professions: ["pp"], publishedAt: new Date() } });
+    assert.equal((await repository.searchPublished("pdfworkflow")).total, 0);
+    const sitemap = (await import("../../src/app/sitemap")).default;
+    assert.ok(!(await sitemap()).some(entry => entry.url.includes(input.slug)));
+    const approved = await db.contentRevision.findUniqueOrThrow({ where: { id: saved.revisionId } });
+    const replacement = await storeDocument(editor, new File([pdfFixture(["Pasal pengganti. Isi sintetis tetap ditinjau pada revisi baru."])], "pengganti.pdf", { type: "application/pdf" }));
+    const next = await service.saveDraft(editor, { ...input, ...saved, version: approved.version, payload: { ...input.payload, documentId: replacement.id, documentReviewed: false } });
+    assert.notEqual(next.revisionId, approved.id);
+    assert.equal((await db.revisionDocument.findUniqueOrThrow({ where: { revisionId: approved.id } })).documentId, asset.id);
+    assert.equal((await db.contentItem.findUniqueOrThrow({ where: { id: saved.itemId } })).publishedRevisionId, approved.id);
+    await service.withdrawContent(approver, saved.itemId, approved.id, "Tinjauan ulang sumber fixture.");
+    assert.equal((await db.contentItem.findUniqueOrThrow({ where: { id: saved.itemId } })).publishedRevisionId, null);
+    assert.deepEqual(await readDocumentFile(stored), bytes);
+    const scanned = await storeDocument(editor, new File([pdfFixture([""])], "pindai.pdf", { type: "application/pdf" }));
+    const scanDraft = await service.saveDraft(editor, { ...input, slug: `scan-${randomUUID()}`, payload: { ...input.payload, documentId: scanned.id, documentReviewed: true } });
+    await assert.rejects(service.submitRevision(editor, scanDraft.itemId, scanDraft.revisionId, scanDraft.version), /OCR/);
+    await assert.rejects(service.saveDraft(editor, { ...input, slug: `missing-${randomUUID()}`, payload: { ...input.payload, documentId: randomUUID() } }), /PDF tidak ditemukan/);
+  } finally { if (previousMedia === undefined) delete process.env.MEDIA_DIRECTORY; else process.env.MEDIA_DIRECTORY = previousMedia; await rm(directory, { recursive: true, force: true }); }
+});
+
+test("kegagalan audit PDF membatalkan metadata/halaman dan membersihkan file baru", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "jafa-document-rollback-")), previousMedia = process.env.MEDIA_DIRECTORY;
+  process.env.MEDIA_DIRECTORY = directory;
+  try {
+    const { storeDocument } = await import("../../src/lib/documents");
+    const before = await db.documentAsset.count();
+    await db.$executeRawUnsafe("CREATE FUNCTION reject_pdf_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action = 'content.document-upload' THEN RAISE EXCEPTION 'fixture audit failure'; END IF; RETURN NEW; END $$");
+    await db.$executeRawUnsafe('CREATE TRIGGER test_pdf_audit BEFORE INSERT ON "AuditEvent" FOR EACH ROW EXECUTE FUNCTION reject_pdf_audit()');
+    try { await assert.rejects(storeDocument(editor, new File([pdfFixture()], "rollback.pdf", { type: "application/pdf" }))); }
+    finally { await db.$executeRawUnsafe('DROP TRIGGER test_pdf_audit ON "AuditEvent"'); await db.$executeRawUnsafe('DROP FUNCTION reject_pdf_audit()'); }
+    assert.equal(await db.documentAsset.count(), before);
+    const { readdir } = await import("node:fs/promises"); assert.deepEqual(await readdir(join(directory, "documents")), []);
+  } finally { if (previousMedia === undefined) delete process.env.MEDIA_DIRECTORY; else process.env.MEDIA_DIRECTORY = previousMedia; await rm(directory, { recursive: true, force: true }); }
 });
 
 registerSecurityTests(() => db);

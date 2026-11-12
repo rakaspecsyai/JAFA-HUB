@@ -2,6 +2,12 @@
 
 Tinjauan ini memeriksa kode autentikasi, sesi, origin, pembatasan laju, hak akses, media, dan workflow yang tersedia. Better Auth dan larangan keputusan bagi seluruh kontributor mengikuti pilihan pengguna 26 Oktober. Pemeriksaan dilakukan oleh agen pengembang pada workspace lokal; ini bukan audit keamanan independen, pentest infrastruktur, atau persetujuan produksi. Suite memakai akun, sandi, serta sesi sintetis terisolasi; status maintenance database pengembangan dicatat terpisah di [VERIFICATION.md](VERIFICATION.md).
 
+## PDF privat R2a — 12 November 2026
+
+Unggahan PDF memakai endpoint editor terpisah, pemeriksaan origin, batas body/file/halaman/hasil teks, rate limit dan worker berwaktu dengan heap terbatas. PDF.js dipanggil tanpa eval/URL, JavaScript dan enkripsi ditolak, keluaran parser tidak diteruskan ke log. File, teks dan checksum disimpan privat; GET metadata/file hanya editor/penyetuju, termasuk setelah persetujuan. Unduhan berupa attachment dengan no-store, nosniff dan CSP sandbox; checksum diperiksa saat dibaca. Persetujuan memakai transaksi serta larangan seluruh kontributor yang sudah ada, dan tidak membuat konten portal/proyeksi publik.
+
+**27 unit, 53 integrasi, dua browser PDF serta enam fase native HTTPS lulus.** Backup fixture memulihkan 18 tabel dan file PDF; ini belum backup staging. Indeks/embedding/AI belum aktif, PDF resmi belum tersedia untuk kalibrasi, dan tidak ada klaim fuzzing seluruh PDF berbahaya atau batas total memori host. Penilaian parser dan konfigurasi host tetap bagian tinjauan keamanan sebelum produksi. Batas lengkap di [DOKUMEN-PDF.md](DOKUMEN-PDF.md), bukti di [VERIFICATION.md](VERIFICATION.md).
+
 ## Runtime native HTTPS lokal — 11 November 2026
 
 Pemeriksa C2 **lulus, exit 0** memakai image produksi dan PostgreSQL 17 baru. Login browser membuktikan cookie Secure/HttpOnly/SameSite=Lax, hash token dan expiry delapan jam; registrasi/origin login asing serta request Server Action dengan peran yang salah ditolak. Perubahan peran mencabut sesi dan kontributor yang menjadi penyetuju tetap ditolak saat memberi persetujuan sendiri. Media draf/terbit/ditarik mengikuti rujukan revisi, termasuk gambar bersama; logout dan expiry DB menolak replay cookie lama. Resource uji dibersihkan. Bukti, percobaan awal serta batas di [VERIFICATION.md](VERIFICATION.md).

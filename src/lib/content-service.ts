@@ -8,7 +8,7 @@ type Tx = Prisma.TransactionClient;
 const sourceSchema = z.object({ title: z.string().trim().max(300), url: z.string().trim().max(2000).nullable().optional(), internalRef: z.string().max(1000).nullable().optional(), publisher: z.string().max(300).optional(), reviewedOn: z.string().max(10) });
 const draftSchema = z.object({
   itemId: z.string().uuid().optional(), revisionId: z.string().uuid().optional(), version: z.number().int().positive().optional(),
-  kind: z.enum(["profession", "article", "regulation", "faq", "page"]),
+  kind: z.enum(["profession", "article", "regulation", "faq", "page", "knowledge"]),
   slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120),
   payload: payloadSchema, reviewedOn: z.string().max(10),
   professions: z.array(z.enum(PROFESSION_KEYS)).max(3), sources: z.array(sourceSchema).max(30)
@@ -54,12 +54,18 @@ export function validateForPublication(kind: Kind, p: Payload, reviewedOn: strin
     if (!p.competencies.length || p.competencies.some(value => !value.trim())) fields.competencies = "Isi kompetensi, satu entri tidak kosong per baris.";
     if (!p.nomenclature) fields.nomenclature = "Isi catatan nomenklatur profil.";
   }
-  if (kind === "regulation") {
+  if (kind === "regulation" || kind === "knowledge") {
     if (!p.number) fields.number = "Isi nomor peraturan.";
     if (!/^\d{4}$/.test(p.year)) fields.year = "Isi tahun peraturan dengan empat angka.";
     if (!p.publisher) fields.publisher = "Isi penerbit peraturan.";
     if (!officialUrl(p.officialUrl)) fields.officialUrl = "Isi URL HTTPS dari domain resmi .go.id.";
     if (!p.statusNote) fields.statusNote = "Isi catatan status dan riwayat peraturan.";
+  }
+  if (kind === "knowledge") {
+    if (!p.documentId) fields.documentId = "Lampirkan PDF sebelum pengajuan.";
+    if (!p.documentReviewed) fields.documentReviewed = "Cocokkan seluruh halaman hasil ekstraksi dengan PDF, termasuk tabel dan lampiran.";
+    if (p.regulationStatus === "unverified") fields.regulationStatus = "Verifikasi status peraturan sebelum pengajuan.";
+    if (p.statusNote === "Status dan riwayat aturan perlu ditinjau pada sumber resmi.") fields.statusNote = "Isi hasil verifikasi status dan relasi perubahan peraturan.";
   }
   if (kind === "article" && p.articleType === "Kabar DJKN" && (!calendarDate(p.sourceDate) || p.sourceDate > today)) fields.sourceDate = "Isi tanggal publikasi sumber berita yang sah dan tidak berada di masa depan.";
   if (p.image && (!p.imageAlt || !p.imageCredit)) fields.imageAlt = "Gambar memerlukan teks alternatif dan atribusi.";
@@ -73,6 +79,8 @@ export async function saveDraft(actor: Staff, raw: unknown) {
   const parsed = draftSchema.safeParse(raw);
   if (!parsed.success) throw new AppError("Format draf tidak sesuai. Periksa slug, isi, dan sumber.", 400);
   const input = parsed.data;
+  if (input.kind !== "knowledge" && input.payload.documentId) throw new AppError("PDF hanya dapat dilampirkan pada Sumber PDF.");
+  if (input.kind === "knowledge" && input.payload.image) throw new AppError("Gunakan lampiran PDF untuk sumber pengetahuan.");
   if (input.sources.some(s => s.url && !safeUrl(s.url, false))) throw new AppError("Gunakan tautan HTTPS atau tautan lokal yang aman.");
   if (input.payload.relatedLinks.some(l => !safeUrl(l.href))) throw new AppError("Gunakan tautan HTTPS atau tautan lokal yang aman.", 400, { relatedLinks: "Tautan terkait harus berupa path lokal atau HTTPS." });
   if (input.payload.contactChannels.some(channel => channel.value && !contactHref(channel))) throw new AppError("Alamat kanal kontak tidak sesuai.", 400, { contactChannels: "Gunakan URL HTTPS, email, atau nomor telepon yang sah." });
@@ -81,7 +89,7 @@ export async function saveDraft(actor: Staff, raw: unknown) {
     await checkActor(tx, actor, "editor");
     let item;
     if (!input.itemId) {
-      if (!["article", "regulation", "faq"].includes(input.kind)) throw new AppError("Profil JF dan halaman pendukung merupakan rekaman tetap.", 403);
+      if (!["article", "regulation", "faq", "knowledge"].includes(input.kind)) throw new AppError("Profil JF dan halaman pendukung merupakan rekaman tetap.", 403);
       if (await tx.contentItem.findUnique({ where: { kind_slug: { kind: input.kind, slug: input.slug } } })) throw new AppError("Slug telah digunakan. Pilih slug lain.", 409);
       item = await tx.contentItem.create({ data: { kind: input.kind, slug: input.slug }, include: { revisions: { include: { sources: true, professions: true, media: true } } } });
     } else item = await lockItem(tx, input.itemId);
@@ -97,6 +105,8 @@ export async function saveDraft(actor: Staff, raw: unknown) {
     const mediaId = input.payload.image.startsWith("/api/media/") ? input.payload.image.split("/").pop() : undefined;
     if (mediaId && !(await tx.mediaAsset.findUnique({ where: { id: mediaId } }))) throw new AppError("Gambar tidak ditemukan. Unggah kembali.");
     const data = { payload: input.payload as Prisma.InputJsonValue, reviewedOn: input.reviewedOn };
+    const documentId = input.kind === "knowledge" ? input.payload.documentId : "";
+    if (documentId && !await tx.documentAsset.findUnique({ where: { id: documentId } })) throw new AppError("PDF tidak ditemukan. Unggah ulang.", 400, { documentId: "PDF tidak ditemukan. Unggah ulang." });
     const revision = previous && previous.status !== "approved"
       ? await tx.contentRevision.update({ where: { id: previous.id }, data: { ...data, version: { increment: 1 } } })
       : await tx.contentRevision.create({ data: { ...data, itemId: item.id, authorId: actor.id, number: (previous?.number ?? 0) + 1 } });
@@ -104,6 +114,10 @@ export async function saveDraft(actor: Staff, raw: unknown) {
     await tx.sourceReference.deleteMany({ where: { revisionId: revision.id } });
     await tx.revisionProfession.deleteMany({ where: { revisionId: revision.id } });
     await tx.revisionMedia.deleteMany({ where: { revisionId: revision.id } });
+    if (input.kind === "knowledge") {
+      await tx.revisionDocument.deleteMany({ where: { revisionId: revision.id } });
+      if (documentId) await tx.revisionDocument.create({ data: { revisionId: revision.id, documentId } });
+    }
     if (input.sources.length) await tx.sourceReference.createMany({ data: input.sources.map((s, order) => ({ ...s, url: s.url || null, revisionId: revision.id, order })) });
     if (input.professions.length) await tx.revisionProfession.createMany({ data: [...new Set(input.professions)].map(key => ({ revisionId: revision.id, key })) });
     if (mediaId) await tx.revisionMedia.create({ data: { revisionId: revision.id, mediaId, alt: input.payload.imageAlt, caption: input.payload.imageCredit } });
@@ -111,6 +125,12 @@ export async function saveDraft(actor: Staff, raw: unknown) {
     await tx.contentItem.update({ where: { id: item.id }, data: { updatedAt: new Date() } });
     return { itemId: item.id, revisionId: revision.id, version: revision.version };
   });
+}
+
+async function validateDocument(tx: Tx, revisionId: string) {
+  const link = await tx.revisionDocument.findUnique({ where: { revisionId }, include: { document: true } });
+  if (!link) throw new AppError("Lampirkan PDF sebelum mengajukan sumber.", 400, { documentId: "Lampirkan PDF sebelum mengajukan sumber." });
+  if (link.document.needsOcr) throw new AppError("PDF memiliki halaman tanpa teks yang memadai. Selesaikan OCR dan unggah ulang sebelum pengajuan.", 400, { documentId: "Dokumen memerlukan OCR atau pemeriksaan halaman yang tidak terbaca." });
 }
 
 export async function submitRevision(actor: Staff, itemId: string, revisionId: string, version: number) {
@@ -122,6 +142,7 @@ export async function submitRevision(actor: Staff, itemId: string, revisionId: s
     if (!r || r.id !== revisionId || r.version !== version) throw conflict();
     if (!["draft", "returned"].includes(r.status)) throw new AppError("Hanya revisi draf atau dikembalikan yang dapat diajukan.", 409);
     validateForPublication(item.kind, payloadSchema.parse(r.payload), r.reviewedOn, r.sources, r.professions.map(p => p.key));
+    if (item.kind === "knowledge") await validateDocument(tx, r.id);
     await tx.revisionContributor.upsert({ where: { revisionId_userId: { revisionId: r.id, userId: actor.id } }, create: { revisionId: r.id, userId: actor.id }, update: {} });
     await tx.contentRevision.update({ where: { id: r.id }, data: { status: "submitted", submitterId: actor.id, submittedAt: new Date(), version: { increment: 1 } } });
     await tx.contentItem.update({ where: { id: item.id }, data: { updatedAt: new Date() } });
@@ -144,14 +165,18 @@ export async function reviewRevision(actor: Staff, itemId: string, revisionId: s
     if (r.authorId === actor.id || r.submitterId === actor.id || await tx.revisionContributor.findUnique({ where: { revisionId_userId: { revisionId: r.id, userId: actor.id } } })) throw new AppError("Pembuat, pengaju, atau kontributor tidak boleh menyetujui revisinya sendiri.", 403);
     const p = payloadSchema.parse(r.payload);
     if (decision === "publish") validateForPublication(item.kind, p, r.reviewedOn, r.sources, r.professions.map(p => p.key));
+    if (decision === "publish" && item.kind === "knowledge") await validateDocument(tx, r.id);
     const now = new Date();
     await tx.contentRevision.update({ where: { id: r.id }, data: { status: decision === "publish" ? "approved" : "returned", reviewerId: actor.id, note: note.trim(), decidedAt: now, version: { increment: 1 } } });
     if (decision === "publish") {
       await tx.contentItem.update({ where: { id: item.id }, data: { publishedRevisionId: r.id, firstPublishedAt: item.firstPublishedAt ?? now } });
-      const projection = { revisionId: r.id, kind: item.kind, title: p.title, summary: p.summary, text: searchText({ payload: p, professions: r.professions.map(x => x.key) }), path: contentPath(item.kind, item.slug), professions: r.professions.map(x => x.key), publishedAt: now };
-      await tx.publishedSearchEntry.upsert({ where: { itemId: item.id }, create: { itemId: item.id, ...projection }, update: projection });
+      if (item.kind !== "knowledge") {
+        const projection = { revisionId: r.id, kind: item.kind, title: p.title, summary: p.summary, text: searchText({ payload: p, professions: r.professions.map(x => x.key) }), path: contentPath(item.kind, item.slug), professions: r.professions.map(x => x.key), publishedAt: now };
+        await tx.publishedSearchEntry.upsert({ where: { itemId: item.id }, create: { itemId: item.id, ...projection }, update: projection });
+      }
     }
     await audit(tx, actor, decision === "publish" ? "content.publish" : "content.return", item.id, r.id, note.trim());
+    return { kind: item.kind };
   });
 }
 export async function withdrawContent(actor: Staff, itemId: string, expectedRevision: string, note: string, archive = false) {
@@ -168,5 +193,6 @@ export async function withdrawContent(actor: Staff, itemId: string, expectedRevi
     await tx.contentItem.update({ where: { id: item.id }, data: { publishedRevisionId: null, archived: archive } });
     await tx.publishedSearchEntry.deleteMany({ where: { itemId: item.id } });
     await audit(tx, actor, archive ? "content.archive" : "content.withdraw", item.id, expectedRevision, note.trim());
+    return { kind: item.kind };
   });
 }

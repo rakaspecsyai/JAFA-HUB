@@ -13,6 +13,10 @@ import { isRedirectError } from "next/dist/client/components/redirect-error.js";
 import { hashPassword, tokenHash, verifyPassword } from "../../src/lib/passwords";
 import { credentialUser } from "../../src/lib/credentials";
 import { payloadSchema } from "../../src/lib/content-types";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { pdfFixture } from "../fixtures/pdf";
 
 function withRequest<T>(headers: Headers, run: () => Promise<T>) {
   // shortcut: this request harness uses pinned Next internals; adapt it when upgrading Next and keep HTTP/browser checks separate.
@@ -23,6 +27,49 @@ function withRequest<T>(headers: Headers, run: () => Promise<T>) {
 }
 
 export function registerSecurityTests(database: () => PrismaClient) {
+  test("HTTP PDF memisahkan akses unggah/pratinjau/file dan menolak origin/sesi yang salah", async () => {
+    const db = database(), auth = await import("../../src/lib/auth");
+    const upload = (await import("../../src/app/api/documents/route")).POST;
+    const metadata = (await import("../../src/app/api/documents/[id]/route")).GET;
+    const download = (await import("../../src/app/api/documents/[id]/file/route")).GET;
+    const directory = await mkdtemp(join(tmpdir(), "jafa-document-http-")), previousMedia = process.env.MEDIA_DIRECTORY;
+    process.env.MEDIA_DIRECTORY = directory;
+    try {
+      const sessions = new Map<string, Headers>(), users: User[] = [];
+      const password = "pdf-http-password-123", hash = await hashPassword(password);
+      for (const role of ["editor", "approver", "admin"] as const) {
+        const user = await db.user.create({ data: credentialUser({ name: "Petugas PDF fixture", email: `pdf-${randomUUID()}@uji.invalid`, role, mustChangePassword: false }, hash) }); users.push(user);
+        const login = await withRequest(new Headers(), () => auth.authenticate(user.email, password, new Headers()));
+        sessions.set(role, new Headers({ cookie: `${auth.sessionCookieName()}=${encodeURIComponent(login.cookies.get(auth.sessionCookieName())!.value)}` }));
+      }
+      const send = (headers: Headers, origin = "http://localhost:3000") => {
+        const body = new FormData(); body.set("file", new File([pdfFixture()], "fixture.pdf", { type: "application/pdf" }));
+        return withRequest(headers, () => upload(new Request("http://localhost:3000/api/documents", { method: "POST", headers: { origin }, body })));
+      };
+      const before = await db.documentAsset.count();
+      assert.equal((await send(new Headers())).result.status, 401);
+      for (const role of ["admin", "approver"]) assert.equal((await send(sessions.get(role)!)).result.status, 403);
+      assert.equal((await send(sessions.get("editor")!, "https://asing.invalid")).result.status, 403);
+      assert.equal(await db.documentAsset.count(), before);
+      const result = (await send(sessions.get("editor")!)).result; assert.equal(result.status, 201);
+      const { id } = await result.json(), params = { params: Promise.resolve({ id }) };
+      for (const headers of [new Headers(), sessions.get("admin")!]) {
+        assert.equal((await withRequest(headers, () => metadata(new Request(`http://localhost:3000/api/documents/${id}`), params))).result.status, 404);
+        assert.equal((await withRequest(headers, () => download(new Request(`http://localhost:3000/api/documents/${id}/file`), params))).result.status, 404);
+      }
+      for (const role of ["editor", "approver"]) {
+        const response = (await withRequest(sessions.get(role)!, () => metadata(new Request(`http://localhost:3000/api/documents/${id}`), params))).result;
+        assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "private, no-store");
+        const page = await response.json(); assert.equal(page.pageCount, 1); assert.equal(page.storageKey, undefined); assert.match(page.pages[0].text, /Pasal 1/);
+        const file = (await withRequest(sessions.get(role)!, () => download(new Request(`http://localhost:3000/api/documents/${id}/file`), params))).result;
+        assert.equal(file.status, 200); assert.match(file.headers.get("content-disposition")!, /^attachment;/); assert.match(file.headers.get("content-security-policy")!, /sandbox/);
+        assert.deepEqual(Buffer.from(await file.arrayBuffer()), pdfFixture());
+      }
+      assert.equal((await withRequest(sessions.get("editor")!, () => metadata(new Request(`http://localhost:3000/api/documents/${id}?page=0`), params))).result.status, 400);
+      await db.session.updateMany({ where: { userId: users[0].id }, data: { expiresAt: new Date(0) } });
+      assert.equal((await withRequest(sessions.get("editor")!, () => download(new Request(`http://localhost:3000/api/documents/${id}/file`), params))).result.status, 404);
+    } finally { if (previousMedia === undefined) delete process.env.MEDIA_DIRECTORY; else process.env.MEDIA_DIRECTORY = previousMedia; await rm(directory, { recursive: true, force: true }); }
+  });
   test("Server Action CMS membedakan sesi, akses dan konflik tanpa menimpa revisi", async () => {
     const db = database();
     const auth = await import("../../src/lib/auth"), actions = await import("../../src/lib/admin-actions");

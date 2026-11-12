@@ -1,6 +1,6 @@
 # PRD tambahan: asisten RAG Jafa Hub
 
-Status 11 November 2026: **rancangan R1 untuk ditinjau**, belum implementasi atau aktivasi AI. Dokumen ini melengkapi [PRD utama](../PRD-Jafa-Hub.md); jalur C2 dan gerbang rilis tetap berlaku. RAG dikembangkan paralel dan diaktifkan bertahap setelah evaluasi, tanpa menjadi syarat baru rilis portal inti secara otomatis.
+Status 12 November 2026: **R2a selesai lokal** untuk unggah PDF privat, ekstraksi/halaman, pratinjau dan persetujuan sumber. R2b indeks/retrieval dan R3/R4 generasi/evaluasi belum selesai; AI belum aktif. Panduan implementasi dan batas di [DOKUMEN-PDF.md](DOKUMEN-PDF.md), bukti aktual di [VERIFICATION.md](VERIFICATION.md). Gerbang rilis PRD utama tetap berlaku.
 
 ## Keputusan pengguna dan keputusan terbuka
 
@@ -31,12 +31,12 @@ Di luar MVP: agen yang mengubah CMS, persetujuan otomatis, penetapan PAK/keputus
 5. **Indeks setelah persetujuan.** Pekerjaan embedding berjalan di luar transaksi publikasi melalui job PostgreSQL; tidak perlu layanan antrean baru untuk MVP. Simpan identitas revisi, checksum teks/pemecahan, model embedding dan dimensinya. Retry tidak mengindeks versi basi atau membayar ulang potongan teks identik dengan konfigurasi embedding sama.
 6. **Revisi/penarikan.** PDF dan hasil ekstraksi yang disetujui tidak ditimpa; perubahan menjadi revisi baru. Retrieval memeriksa revisi terbit dan status aktual di database. Penarikan/arsip langsung mengeluarkan sumber dari retrieval walau penghapusan vektor belum selesai. Sebelum jawaban final dikirim, periksa kembali kelayakan sumber; bila berubah, batalkan hasil dan lakukan fallback/retry terbatas.
 
-Usulan batas pilot: 20 MB dan 500 halaman per PDF, dimulai dari beberapa PDF teks. Angka ini rancangan teknis, bukan batas unggahan yang sudah tersedia; dikalibrasi terhadap berkas contoh sebelum R2 diaktifkan. UI unggah/pratinjau PDF belum dibuat.
+R2a menerapkan batas pilot 20 MiB dan 500 halaman per PDF teks. UI unggah/pratinjau sudah tersedia pada CMS → Sumber PDF, dengan penandaan OCR dan konfirmasi pemeriksaan teks/tabel/lampiran. Batas ini baru dibuktikan pada fixture sintetis; kalibrasi PDF resmi pengguna tetap diperlukan.
 
 ## Rancangan teknis yang memakai kode sekarang
 
 - **Next.js/backend dan panel asisten dipakai ulang.** Tambahkan jalur RAG server terpisah dari pencocokan FAQ; UI membedakan jawaban FAQ, AI beta, bukti kurang dan gangguan provider. API key hanya di server, bukan browser atau repository.
-- **Revisi yang sama menjadi pusat kelayakan.** R2 merencanakan jenis konten pengetahuan pada alur `ContentItem/ContentRevision`, dengan aset PDF/halaman ekstraksi terpisah. Payload/form hanya membawa metadata/ID, bukan seluruh teks PDF melalui input tersembunyi 150 KB. Catatan persetujuan dan kontributor memakai aturan layanan yang sama.
+- **Revisi yang sama menjadi pusat kelayakan.** R2a memakai jenis konten pengetahuan pada alur `ContentItem/ContentRevision`, dengan aset PDF/halaman ekstraksi terpisah. Payload/form hanya membawa metadata/ID, bukan seluruh teks PDF melalui input tersembunyi 150 KB. Catatan persetujuan dan kontributor memakai aturan layanan yang sama.
 - **Public query harus eksplisit.** Penambahan jenis pengetahuan wajib memperbarui `Kind`, `contentPath`, pemetaan modul, validator dan query pencarian/sitemap yang terdampak. PDF privat tidak boleh jatuh ke default URL regulasi atau terindeks publik karena filter lama `kind != page`. Metadata sumber yang boleh dilihat publik dibentuk secara eksplisit; raw file tetap akses petugas.
 - **PostgreSQL + pgvector menjadi rancangan awal.** Gabungkan pencarian kata kunci/nomor peraturan dan kemiripan makna. Pilihan jumlah potongan dan pemeringkatan dibuktikan oleh pertanyaan acuan. Penyedia embedding menerima teks yang sudah ditinjau; model jawaban hanya menerima konteks terpilih, bukan seluruh PDF setiap pertanyaan.
 - **Siapkan extension tanpa menaikkan hak aplikasi.** Image PostgreSQL C1 belum memasang pgvector. Provisioning extension dilakukan admin pada database uji, sebelum migrasi yang memerlukannya; role aplikasi `jafa` tetap non-superuser. Paket PGlite terpasang menyediakan modul vector, tetapi loader saat ini belum mengaktifkannya: dukungan uji/kompatibilitas harus diselesaikan sebelum migrasi umum, tanpa membuka/migrasikan data pengembangan pengguna otomatis.
@@ -78,7 +78,8 @@ GPT-5 nano tidak dijadikan baseline proyek baru karena halaman model menandainya
 | Paket | Hasil terbatas | Bukti selesai |
 | --- | --- | --- |
 | R1 | Dokumen ini, keputusan PDF/API cloud dan proposal biaya; pilihan model/cap tetap ditandai terbuka | Sumber/batas/data/aturan tercatat, aritmetika biaya diperiksa, tidak ada klaim implementasi/model aktif |
-| R2 | Unggah PDF privat, ekstraksi/pratinjau, revisi/persetujuan dan indeks | Fixture PDF valid/rusak/pindai, akses tiga peran, checksum/halaman, retry idempoten dan sumber ditarik tidak diretrieval; kompatibilitas DB diuji pada salinan/fixture |
+| R2a | Unggah PDF privat, ekstraksi/pratinjau dan revisi/persetujuan sumber | Implementasi lokal; fixture valid/rusak/pindai/terenkripsi/JavaScript, akses tiga peran, checksum/halaman, revisi immutable dan backup/restore diperiksa. Bukti aktual di VERIFICATION.md |
+| R2b | Provisioning vector, job indeks/embedding, cache/retry dan retrieval | Belum diimplementasikan. Retry idempoten, tidak mengindeks versi basi, kelayakan sumber ditarik dan kompatibilitas extension dibuktikan sebelum aktivasi |
 | R3 | Endpoint RAG dan integrasi panel dengan kutipan/fallback/batas penggunaan | API nyata hanya setelah key/cap/sumber siap; rujukan harus berasal dari konteks, error provider/input tetap, pemakaian dibatasi dan tidak ada tools mutasi |
 | R4 | Evaluasi dokumen pengguna dan beta | Penilai substansi memeriksa kesesuaian jawaban, halaman/pasal, konteks ditemukan, bukti kurang/konflik sumber, dokumen lama/ditarik, Bahasa Indonesia, latensi dan token/biaya; ambang mutu ditetapkan dari pilot sebelum publik |
 

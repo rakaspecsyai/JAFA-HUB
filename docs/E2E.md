@@ -16,6 +16,8 @@ PLAYWRIGHT_PORT=5185 npm run test:e2e
 
 ## Isolasi dan fixture
 
+**PDF privat R2a, 12 November:** `npm run test:e2e -- documents.spec.ts` lulus **2/2** pada desktop/mobile: PDF palsu/pindai, ekstraksi per halaman, fokus teks baru, tinjauan wajib, simpan/ajukan/setujui/tarik, revisi berikutnya dan file yang tetap privat. Suite kini 62 kasus; 60 kasus lama tidak diulang. Pemeriksa native yang sama juga lulus enam fase setelah penambahan PDF, memakai image produksi/PostgreSQL/HTTPS fixture. Bukti dan batas di [VERIFICATION.md](VERIFICATION.md), panduan fitur di [DOKUMEN-PDF.md](DOKUMEN-PDF.md).
+
 **Pemeriksa native C2 terpisah, 11 November 2026:** `node --import tsx tests/operational/native-runtime.check.ts` menjalankan image produksi, PostgreSQL native dan HTTPS loopback dengan fixture baru. **Lulus, exit 0**: login/cookie/sesi, tiga peran, penolakan persetujuan sendiri setelah perubahan peran, publikasi/penarikan, revisi draf berikutnya serta media bersama. Resource uji dibersihkan. Hasil ini tidak menambah atau mengulang 60 kasus suite PGlite di bawah; cara menjalankan, artefak privat dan batas staging/UAT ada di [RUNTIME.md](RUNTIME.md) dan [VERIFICATION.md](VERIFICATION.md).
 
 `scripts/e2e-server.ts` membuat direktori `jafa-e2e-*` di direktori sementara sistem untuk database dan media. Harness menetapkan `JAFA_LOCAL_DATABASE_DIRECTORY`, mematikan pratinjau, serta mengganti konfigurasi database, origin, kunci rate limit, dan rahasia Better Auth untuk proses uji. `.env` asli tidak disalin/diubah dan `.local/development-pg` tidak dibuka oleh harness. Dependensi terpasang dipakai melalui symlink; root Turbopack hanya disesuaikan pada salinan config.

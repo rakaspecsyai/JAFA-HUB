@@ -18,6 +18,7 @@ enum ContentKind {
   regulation
   faq
   page
+  knowledge
 }
 
 enum RevisionStatus {
@@ -124,6 +125,7 @@ model ContentRevision {
   professions  RevisionProfession[]
   media        RevisionMedia[]
   contributors RevisionContributor[]
+  document     RevisionDocument?
   @@unique([itemId, number])
   @@index([status, updatedAt])
 }
@@ -177,6 +179,37 @@ model RevisionMedia {
   alt        String
   caption    String          @default("")
   @@id([revisionId, mediaId])
+}
+
+model DocumentAsset {
+  id            String             @id @default(uuid()) @db.Uuid
+  storageKey    String             @unique
+  checksum      String
+  size          Int
+  pageCount     Int
+  needsOcr      Boolean
+  parserVersion String
+  uploadedBy    String             @db.Uuid
+  createdAt     DateTime           @default(now())
+  pages         DocumentPage[]
+  uses          RevisionDocument[]
+}
+
+model DocumentPage {
+  documentId String        @db.Uuid
+  document   DocumentAsset @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  number     Int
+  text       String
+  checksum   String
+  @@id([documentId, number])
+}
+
+model RevisionDocument {
+  revisionId String          @id @db.Uuid
+  revision   ContentRevision @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  documentId String          @db.Uuid
+  document   DocumentAsset   @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  @@index([documentId])
 }
 
 model PublishedSearchEntry {

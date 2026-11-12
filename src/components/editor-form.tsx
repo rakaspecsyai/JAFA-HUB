@@ -2,9 +2,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveDraftAction, submitAction } from "@/lib/admin-actions";
-import { payloadSchema, professionNames, type Kind, type Payload, type Source } from "@/lib/content-types";
+import { payloadSchema, professionNames, regulationStatuses, type Kind, type Payload, type Source } from "@/lib/content-types";
 import { ActionMessage } from "./workflow-forms";
 import { RevisionPreview } from "./revision-preview";
+import { DocumentPreview } from "./document-preview";
 import { useContentAction } from "./content-action";
 import s from "./admin.module.css";
 
@@ -43,9 +44,10 @@ export function EditorForm(props: Props) {
     if (!file) return; uploadAttempt.current = true; setUploading(true); setUploadError("");
     try {
       const form = new FormData(); form.set("file", file); form.set("attribution", payload.imageCredit);
-      const response = await fetch("/api/media", { method: "POST", body: form }); const result = await response.json();
+      const response = await fetch(props.kind === "knowledge" ? "/api/documents" : "/api/media", { method: "POST", body: form }); const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Gambar belum berhasil diunggah.");
-      update("image", `/api/media/${result.id}`);
+      if (props.kind === "knowledge") { setPayload(value => ({ ...value, documentId: result.id, documentReviewed: false })); setDirty(true); }
+      else update("image", `/api/media/${result.id}`);
     } catch (error) { setUploadError(error instanceof Error ? error.message : "Unggahan gagal. Coba lagi."); }
     finally { setUploading(false); }
   }
@@ -58,7 +60,17 @@ export function EditorForm(props: Props) {
         <div className={s.formGrid}><label>Slug<input value={slug} onChange={e => { setSlug(e.target.value); setDirty(true); }} readOnly={props.slugLocked} pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={120} required /><span className={s.formHelp}>{props.slugLocked ? "Slug terkunci untuk menjaga tautan." : "Huruf kecil, angka, dan tanda hubung."}</span></label><label><span id={`${id}-reviewedOn-label`}>Tanggal tinjauan materi</span><input {...a11y("reviewedOn")} type="date" value={reviewedOn} onChange={e => { setReviewedOn(e.target.value); setDirty(true); }} />{err("reviewedOn")}</label></div>
         {field("Ringkasan", "summary", true)}
         {props.kind === "article" && <div className={s.formGrid}><label>Jenis artikel<select value={payload.articleType} onChange={e => update("articleType", e.target.value as Payload["articleType"])}><option>Panduan</option><option>Kabar DJKN</option></select></label><label><span id={`${id}-sourceDate-label`}>Tanggal publikasi sumber</span><input {...a11y("sourceDate")} type="date" value={payload.sourceDate} onChange={e => update("sourceDate", e.target.value)} />{err("sourceDate")}</label></div>}
-        {props.kind === "regulation" && <><div className={s.formGrid}>{field("Nomor peraturan", "number")}{field("Tahun", "year")}</div>{field("Penerbit", "publisher")}{field("URL dokumen resmi (.go.id)", "officialUrl")}{field("Catatan status & riwayat", "statusNote", true)}</>}
+        {["regulation", "knowledge"].includes(props.kind) && <><div className={s.formGrid}>{field("Nomor peraturan", "number")}{field("Tahun", "year")}</div>{field("Penerbit", "publisher")}{field("URL dokumen resmi (.go.id)", "officialUrl")}{field("Catatan status & riwayat", "statusNote", true)}</>}
+        {props.kind === "knowledge" && <>
+          <label><span id={`${id}-regulationStatus-label`}>Status peraturan terverifikasi</span><select {...a11y("regulationStatus")} value={payload.regulationStatus} onChange={event => update("regulationStatus", event.target.value as Payload["regulationStatus"])}>{Object.entries(regulationStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{err("regulationStatus")}</label>
+          <section role="group" {...a11y("documentId")} tabIndex={state.fields?.documentId ? -1 : undefined}>
+            <h2 id={`${id}-documentId-label`}>Lampiran PDF privat</h2>
+            <label><span id={`${id}-upload-label`}>Unggah PDF</span><input type="file" accept="application/pdf" aria-labelledby={`${id}-upload-label`} aria-invalid={!!uploadError} aria-describedby={`${id}-upload-help${uploadError ? ` ${id}-upload-error` : ""}`} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void upload(file); }} /><span id={`${id}-upload-help`} className={s.formHelp}>Maksimal 20 MB dan 500 halaman. PDF teks tanpa enkripsi atau JavaScript. Unggahan pengganti membuat aset baru.</span>{uploadError && <span id={`${id}-upload-error`} role="alert" className="error-text">{uploadError}</span>}</label>
+            {payload.documentId && <DocumentPreview key={payload.documentId} id={payload.documentId} />}{err("documentId")}
+          </section>
+          <div className={s.checkRow}><label><input type="checkbox" {...a11y("documentReviewed")} checked={payload.documentReviewed} onChange={event => update("documentReviewed", event.target.checked)} disabled={!payload.documentId} /><span id={`${id}-documentReviewed-label`}>Saya telah mencocokkan seluruh halaman ekstraksi, tabel dan lampiran dengan PDF asli.</span></label></div>{err("documentReviewed")}
+          <p className={s.formHelp}>Persetujuan hanya menetapkan sumber untuk tahap indeks. PDF tidak menjadi unduhan publik dan belum dipakai untuk jawaban AI.</p>
+        </>}
         {field(props.kind === "faq" ? "Jawaban" : "Isi (Markdown terbatas)", "body", true)}
         <p className={s.formHelp}>Didukung: paragraf, ## judul, daftar dengan -, **teks tebal**, serta [label](https://sumber). HTML ditampilkan sebagai teks.</p>
         {props.kind === "profession" && <>{field("Singkatan", "short")}{field("Definisi", "definition", true)}{field("Kategori", "category")}{listField("Jenjang", "grades")}{listField("Tugas", "tasks")}{listField("Kompetensi", "competencies")}{field("Catatan nomenklatur", "nomenclature", true)}</>}

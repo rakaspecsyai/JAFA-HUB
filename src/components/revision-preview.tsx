@@ -1,6 +1,7 @@
-import { dateLabel, professionNames, safeUrl, type Kind, type Payload, type Source } from "@/lib/content-types";
+import { dateLabel, professionNames, regulationStatuses, safeUrl, type Kind, type Payload, type Source } from "@/lib/content-types";
 import { Markdown } from "./markdown";
 import { ContactChannels } from "./contact-channels";
+import { DocumentPreview } from "./document-preview";
 import s from "./admin.module.css";
 
 export function RevisionPreview({ label, kind, payload: p, reviewedOn, sources, professions }: { label: string; kind: Kind; payload: Payload; reviewedOn: string; sources: Source[]; professions: string[] }) {
@@ -10,6 +11,7 @@ export function RevisionPreview({ label, kind, payload: p, reviewedOn, sources, 
     {p.image && <figure><img src={p.image} alt={p.imageAlt} width="700" height="400" /><figcaption className={s.formHelp}>{p.imageCredit}<br />Teks alternatif: {p.imageAlt}</figcaption></figure>}
     {kind === "article" && <p className={s.meta}>Jenis: {p.articleType}{p.sourceDate ? ` · Publikasi sumber: ${p.sourceDate}` : ""}</p>}
     <Markdown text={p.body} />
+    {kind === "knowledge" && <><h2>Identitas sumber PDF</h2><p>{p.number} · {p.year}<br />{p.publisher} · {regulationStatuses[p.regulationStatus]}</p><p>{safeUrl(p.officialUrl, false) && <a href={safeUrl(p.officialUrl, false)!} target="_blank" rel="noopener noreferrer">Sumber resmi</a>}</p><p>{p.statusNote}</p><p>Tinjauan ekstraksi editor: {p.documentReviewed ? "dikonfirmasi" : "belum dikonfirmasi"}. PDF tetap privat; indeks dan AI belum aktif.</p>{p.documentId && <DocumentPreview key={p.documentId} id={p.documentId} />}</>}
     {kind === "page" && <ContactChannels channels={p.contactChannels} serviceHours={p.serviceHours} />}
     {kind === "profession" && <><h2>Identitas & jenjang</h2><p>{p.short} · {p.category}</p><ul>{p.grades.map((g, i) => <li key={i}>{g}</li>)}</ul><h2>Definisi</h2><p>{p.definition}</p><h2>Tugas</h2><ul>{p.tasks.map((t, i) => <li key={i}>{t}</li>)}</ul><h2>Kompetensi</h2><ul>{p.competencies.map((t, i) => <li key={i}>{t}</li>)}</ul><h2>Catatan nomenklatur</h2><p>{p.nomenclature}</p></>}
     {kind === "regulation" && <><h2>Identitas regulasi</h2><p>{p.number} · {p.year}<br />Penerbit: {p.publisher}</p><p>{safeUrl(p.officialUrl, false) ? <a href={safeUrl(p.officialUrl, false)!} target="_blank" rel="noopener noreferrer">{p.officialUrl}</a> : p.officialUrl}</p><h2>Status & riwayat</h2><p>{p.statusNote}</p></>}

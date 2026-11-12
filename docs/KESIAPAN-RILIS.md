@@ -4,6 +4,8 @@ Status 11 November 2026: **belum layak dinyatakan siap produksi**. C1 lulus pada
 
 “Belum ditetapkan” berarti nama/pemilik keputusan aktual belum tersedia. Kolom peran menunjukkan pihak yang perlu ditunjuk menurut PRD, bukan penugasan yang sudah disepakati. Bukti teknis historis dan hasil baru dibedakan di [VERIFICATION.md](VERIFICATION.md).
 
+R2a pada 12 November menambah PDF privat/ekstraksi/persetujuan dengan bukti lokal, termasuk runtime native. Korpus resmi belum diterima; batas parser dan kualitas ekstraksi perlu dikalibrasi sebelum penggunaan nyata. R2b indeks/retrieval serta AI belum aktif, dan tidak mengubah status gerbang rilis portal.
+
 | Gerbang / rujukan PRD | Keputusan dan bukti wajib sebelum dibuka | Peran pemilik keputusan; nama aktual | Status aktual |
 | --- | --- | --- | --- |
 | Hosting dan kapasitas / §6, §15.3 | Penyedia/lokasi, satu instance Node.js yang didukung, CPU/RAM/disk, jaringan, persetujuan biaya, staging terbatas; hasil beban pada konfigurasi itu. Hosting statis saja tidak cukup. | Instansi + penanggung jawab teknis; belum ditetapkan | Hosting dan staging belum tersedia |

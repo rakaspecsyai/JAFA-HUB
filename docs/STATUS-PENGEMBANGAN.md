@@ -2,9 +2,9 @@
 
 Dokumen ini menjadi urutan kerja aktif setelah pengguna meminta menghentikan pengulangan development. Dasarnya kode aktual dan PRD, terutama FR-01–18 serta §13–17. Audit ini menelusuri alur utama dan celah produk; bukan audit keamanan independen. Target kapasitas tetap usulan PRD: 2.000 materi dan 50 pembaca bersamaan, belum hasil pengukuran native.
 
-Status ditinjau 11 November 2026: paket A, B, C1 dan C2 selesai lokal. C2 menjalankan image produksi dan PostgreSQL native melalui HTTPS loopback dengan fixture baru; pemeriksa exit 0 dan resource uji dibersihkan. Berikutnya R2 pada jalur RAG; gerbang staging/rilis tetap terbuka.
+Status ditinjau 12 November 2026: paket A, B, C1 dan C2 selesai lokal. R2a selesai lokal untuk PDF privat, ekstraksi/halaman dan persetujuan sumber: 27 unit, 53 integrasi, dua browser terarah, typecheck/build image serta enam fase native HTTPS lulus; empat capture akhir ditinjau. R2b indeks/retrieval serta gerbang staging/rilis tetap terbuka.
 
-Pengguna menyetujui jalur RAG paralel dan beta setelah evaluasi. Keputusan berikutnya: sumber PDF resmi peraturan JF yang akan diunggah, serta API cloud beranggaran murah menggantikan rencana model lokal/Rp0 untuk komponen AI. Rancangan dan kandidat biaya ada di [PRD tambahan RAG](PRD-RAG-Jafa-Hub.md); nominal bulanan/model/key belum ditetapkan, belum ada implementasi atau panggilan berbayar.
+Pengguna menyetujui jalur RAG paralel dan beta setelah evaluasi. Keputusan berikutnya: sumber PDF resmi peraturan JF yang akan diunggah, serta API cloud beranggaran murah menggantikan rencana model lokal/Rp0 untuk komponen AI. Rancangan dan kandidat biaya ada di [PRD tambahan RAG](PRD-RAG-Jafa-Hub.md); nominal bulanan/model/key belum ditetapkan dan tidak ada panggilan berbayar. R2a sudah mengimplementasikan korpus privat; indeks/AI belum aktif.
 
 ## Mengapa pekerjaan berulang
 
@@ -49,7 +49,8 @@ Perbaikan proses: selesaikan paket dengan kriteria penerimaan yang terbatas. Pak
 | C2. Alur native melalui HTTPS | Login/sesi/cookie, tiga peran, publikasi/penarikan dan akses gambar draf/terbit memakai runtime native dan fixture terpisah | **Selesai lokal 11 November:** pemeriksa native exit 0, typecheck/build image lulus, lima fase termasuk penolakan persetujuan sendiri dan penarikan media bersama. Staging resmi tetap memerlukan host/proxy/petugas; batas di VERIFICATION.md |
 | D. Gerbang rilis | Pembaca layar/perangkat nyata, aksesibilitas independen, beban/backup-restore staging, audit keamanan, UAT dan persetujuan substansi | Menunggu sarana/petugas/keputusan sesuai KESIAPAN-RILIS.md; bukan backlog yang diselesaikan dengan mengulang tes lokal |
 | R1. Rancangan RAG (paralel C2) | Sumber, akses, alur PDF, model/API, biaya, privasi dan evaluasi | **Rancangan tersedia** di PRD-RAG-Jafa-Hub.md. PDF/API cloud dipilih pengguna; penyedia/cap masih proposal, PDF belum diterima |
-| R2. Korpus dan indeks | Ingest PDF privat, ekstraksi/halaman, peninjauan/persetujuan dan pencarian | **Paket pengembangan berikutnya:** belum ada modul unggah PDF, extension vector aktif atau korpus; PDF pengguna belum diterima |
+| R2a. Korpus privat | Unggah PDF, ekstraksi/halaman, pratinjau, revisi dan persetujuan sumber | **Selesai lokal:** 27 unit, 53 integrasi, dua browser PDF, typecheck, build image dan enam fase native HTTPS lulus; empat capture akhir ditinjau. Tidak menerbitkan file PDF atau mengaktifkan AI |
+| R2b. Indeks/retrieval | Provisioning vector, job embedding, cache/retry dan pencarian sumber layak | **Paket berikutnya:** belum diimplementasikan. PDF pengguna, provider/cap/key belum tersedia; R2 penuh belum selesai |
 | R3/R4. Jawaban dan beta | API generatif dengan kutipan/fallback/batas penggunaan lalu evaluasi dokumen pengguna | Menunggu korpus, key/cap dan hasil kualitas; bukan syarat otomatis rilis portal inti |
 
 Exception development `Performance.measure` tetap memerlukan diagnosis. Prioritas naik bila reproduksi menunjukkan alur inti terganggu; belum ada dasar untuk mengganti dependensi atau menekan exception. RAG kini mempunyai permintaan dan rancangan tersendiri; SSO/fitur lain tetap di luar scope sampai ada kebutuhan baru. C2 dan RAG tidak membuka ulang paket A/B/C1 tanpa alasan terkait.

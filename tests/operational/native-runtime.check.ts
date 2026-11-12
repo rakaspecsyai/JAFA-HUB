@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { chromium, expect, type Browser, type BrowserContext, type Page, type Request } from "@playwright/test";
 import sharp from "sharp";
 import { testAccounts, testPassword } from "../e2e/accounts";
+import { pdfFixture } from "../fixtures/pdf";
 
 assert(!process.env.PLAYWRIGHT_BASE_URL, "Pemeriksa membuat runtime sendiri; target eksternal tidak diizinkan.");
 const root = process.cwd(), project = `jafa-native-check-${randomBytes(6).toString("hex")}`;
@@ -67,7 +68,7 @@ try {
   for (const args of [["ps", "-aq"], ["volume", "ls", "-q"], ["network", "ls", "-q"]]) {
     assert.equal(await run(docker, [...args, "--filter", `label=com.docker.compose.project=${project}`]), "", "Nama resource uji sudah digunakan.");
   }
-  console.log("Membangun image sumber untuk C2.");
+  console.log("Membangun image sumber untuk pemeriksaan native.");
   await compose(["build", "app", "database"]);
   resources = true;
   await compose(["up", "-d", "--wait", "--wait-timeout", "90", "database"]);
@@ -234,6 +235,41 @@ try {
   await database(`await db.session.updateMany({where:{user:{email:${JSON.stringify(testAccounts.editor.email)}}},data:{expiresAt:new Date(0)}});`);
   assert.equal((await editor.request.get("/admin", { maxRedirects: 0 })).status(), 307); assert.equal((await editor.request.get(media)).status(), 404);
   done("Logout mencabut sesi lama dan expiry database menolak akses privat.");
+  const pdfEditor = await login(editor, "editor"), pdfReviewer = await login(approver, "approver");
+  await pdfEditor.goto("/admin/dokumen/baru");
+  const pdfSlug = `${project}-pdf`;
+  for (const [name, value] of [["Judul", "Sumber PDF native"], ["Ringkasan", "Sumber sintetis native; bukan materi pengguna."], ["Nomor peraturan", "UJI 1"], ["Tahun", "2026"], ["Penerbit", "Instansi fixture"], ["URL dokumen resmi (.go.id)", "https://www.djkn.kemenkeu.go.id/"], ["Catatan status & riwayat", "Berlaku pada fixture; tidak ada aturan perubahan terkait."]]) await pdfEditor.getByRole("textbox", { name, exact: true }).fill(value);
+  await pdfEditor.getByLabel("Slug").fill(pdfSlug);
+  await pdfEditor.getByLabel("Tanggal tinjauan materi", { exact: true }).fill("2026-10-21");
+  await pdfEditor.getByRole("combobox", { name: "Status peraturan terverifikasi", exact: true }).selectOption("current");
+  await pdfEditor.getByRole("checkbox", { name: "Penilai Pemerintah", exact: true }).check();
+  await pdfEditor.getByRole("button", { name: "Tambah sumber", exact: true }).click();
+  await pdfEditor.getByLabel("Judul sumber", { exact: true }).fill("Sumber PDF fixture native");
+  await pdfEditor.getByLabel("Tanggal tinjauan sumber", { exact: true }).fill("2026-10-21");
+  await pdfEditor.getByLabel("URL HTTPS publik", { exact: true }).fill("https://www.djkn.kemenkeu.go.id/");
+  const pdfText = ["Pasal 1. Sumber PDF native yang pertama untuk tinjauan.", "Pasal 2. Sumber PDF native pada halaman kedua."];
+  const [pdfUpload] = await Promise.all([pdfEditor.waitForResponse(response => new URL(response.url()).pathname === "/api/documents" && response.request().method() === "POST"), pdfEditor.getByLabel("Unggah PDF", { exact: true }).setInputFiles({ name: "native.pdf", mimeType: "application/pdf", buffer: pdfFixture(pdfText) })]);
+  assert.equal(pdfUpload.status(), 201); const documentId = (await pdfUpload.json()).id;
+  await expect(pdfEditor.getByRole("region", { name: "Teks halaman PDF 1", exact: true })).toHaveText(pdfText[0]);
+  await pdfEditor.getByRole("button", { name: "Halaman berikutnya", exact: true }).click();
+  await expect(pdfEditor.getByRole("region", { name: "Teks halaman PDF 2", exact: true })).toHaveText(pdfText[1]);
+  await pdfEditor.getByRole("checkbox", { name: /Saya telah mencocokkan seluruh halaman/ }).check();
+  await action(pdfEditor, "Simpan draf"); await expect(pdfEditor).toHaveURL(/\/admin\/dokumen\/[a-f0-9-]{36}$/, { timeout: 15000 });
+  await expect(pdfEditor.getByRole("status").filter({ hasText: "Draf berhasil disimpan" })).toBeVisible();
+  const pdfUrl = pdfEditor.url(); await action(pdfEditor, "Ajukan pemeriksaan");
+  await expect(pdfEditor.getByRole("status").filter({ hasText: "Revisi diajukan" })).toBeVisible();
+  await pdfReviewer.goto(pdfUrl); await action(pdfReviewer, "Setujui sumber PDF");
+  await expect(pdfReviewer.getByRole("status").filter({ hasText: "Sumber disetujui untuk tahap indeks" })).toBeVisible();
+  await pdfReviewer.goto("/admin"); await expect(pdfReviewer.getByText("Konten terbit", { exact: true }).locator("..").locator("strong")).toHaveText("0"); await pdfReviewer.goto(pdfUrl);
+  for (const ctx of [visitor, admin]) for (const path of [`/api/documents/${documentId}`, `/api/documents/${documentId}/file`]) assert.equal((await ctx.request.get(path)).status(), 404);
+  assert.equal((await approver.request.get(`/api/documents/${documentId}/file`)).status(), 200);
+  assert.ok(!(await (await visitor.request.get("/sitemap.xml")).text()).includes(pdfSlug));
+  await database(`const asset = await db.documentAsset.findUniqueOrThrow({where:{id:${JSON.stringify(documentId)}},include:{pages:{orderBy:{number:'asc'}}}}); assert.equal(asset.pageCount,2); assert.equal(asset.pages[1].text,${JSON.stringify(pdfText[1])}); const item=await db.contentItem.findUniqueOrThrow({where:{kind_slug:{kind:'knowledge',slug:${JSON.stringify(pdfSlug)}}}}); assert.ok(item.publishedRevisionId); assert.equal(await db.publishedSearchEntry.findUnique({where:{itemId:item.id}}),null);`);
+  await pdfReviewer.getByText("Tarik sumber dari korpus", { exact: true }).click();
+  await pdfReviewer.getByLabel("Alasan penarikan", { exact: true }).fill("Tinjauan ulang fixture PDF native.");
+  await action(pdfReviewer, "Tarik sumber PDF"); await expect(pdfReviewer.getByRole("status").filter({ hasText: "Sumber ditarik dari korpus" })).toBeVisible();
+  assert.equal((await visitor.request.get(`/api/documents/${documentId}/file`)).status(), 404);
+  done("PDF native: worker produksi, migrasi, ekstraksi/halaman, persetujuan/penarikan dan file tetap privat lulus.");
   for (const ctx of [visitor, editor, approver, admin]) await ctx.tracing.stop();
   passed = true;
 } finally {
