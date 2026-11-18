@@ -24,6 +24,9 @@ Object.assign(process.env, {
   AUTH_RATE_LIMIT_KEY: randomBytes(32).toString("hex"),
   BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
   TRUSTED_IP_HEADER: "",
+  // Tes tidak boleh memanggil API berbayar walau shell pengguna menyimpan key.
+  OPENAI_API_KEY: "",
+  JAFA_RAG_ENABLED: "false",
   NEXT_TELEMETRY_DISABLED: "1",
   NEXT_MANUAL_SIG_HANDLE: "true",
   NEXT_EXIT_TIMEOUT_MS: "30000"

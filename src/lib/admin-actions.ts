@@ -2,10 +2,12 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { authenticate, logout, requireStaff } from "./auth";
 import { changePassword, manageUser } from "./account-service";
 import { saveDraft, submitRevision, reviewRevision, withdrawContent } from "./content-service";
+import { runIndexJobs } from "./knowledge";
 import { AppError, publicError } from "./errors";
 import { consumeRate, clientKey } from "./rate-limit";
 
@@ -59,6 +61,8 @@ export async function decisionAction(_: ActionState, form: FormData): Promise<Ac
     if (!input.success) throw new AppError("Keputusan atau identitas revisi tidak sesuai.");
     const { itemId, revisionId, version, decision, note } = input.data;
     const { kind } = await reviewRevision(await requireStaff(["approver"]), itemId, revisionId, version, decision, note);
+    // Indeks berjalan sesudah respons, di luar transaksi persetujuan; kegagalan diulang lewat perintah indeks.
+    if (decision === "publish" && kind === "knowledge") after(() => runIndexJobs().catch(() => console.error("Indeks sumber PDF gagal; jalankan ulang perintah indeks.")));
     revalidatePath("/", "layout");
     return { ok: true, message: decision === "publish" ? kind === "knowledge" ? "Sumber disetujui untuk tahap indeks. PDF tetap privat." : "Revisi berhasil diterbitkan." : "Revisi dikembalikan kepada editor." };
   } catch (error) { return publicError(error); }

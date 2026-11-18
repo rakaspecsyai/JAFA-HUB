@@ -20,6 +20,11 @@ Gunakan variabel lingkungan produksi terpisah dari `.env` pengembangan:
 | `AUTH_RATE_LIMIT_KEY` | Nilai acak unik minimal 32 byte; berbeda per lingkungan |
 | `BETTER_AUTH_SECRET` | Rahasia penandatanganan cookie Better Auth, minimal 32 karakter; buat dari 32 byte acak dan pisahkan per lingkungan |
 | `TRUSTED_IP_HEADER` | Kosong sampai proxy tepercaya dikonfigurasi; isi hanya jika proxy menimpa header dan akses langsung aplikasi diblokir |
+| `OPENAI_API_KEY` | Opsional: key OpenAI privat, tidak dikirim lewat chat/issue. Embedding juga memerlukan batas bulanan dan tarif; tanpa itu hanya kata kunci |
+| `JAFA_AI_MONTHLY_USD` | Batas USD bulanan bersama untuk embedding dokumen/pertanyaan dan generasi; belum dipilih pengguna |
+| `JAFA_AI_EMBEDDING_USD_PER_MILLION` | Tarif embedding aktual per satu juta token |
+| `JAFA_AI_INPUT_USD_PER_MILLION` / `JAFA_AI_OUTPUT_USD_PER_MILLION` | Tarif maksimum input/output generatif; input mencakup cache-write, output mencakup penalaran |
+| `OPENAI_RAG_MODEL` / `JAFA_RAG_ENABLED` | Model pilihan dan flag beta; default mati sampai korpus/evaluasi/privasi siap. Rincian di [ASISTEN-RAG.md](ASISTEN-RAG.md) |
 
 Masing-masing rahasia dapat dibuat dengan `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` pada terminal privat. Jangan memakai satu nilai untuk keduanya atau menyalin hasil ke issue/chat/log operasional. Pertahankan `BETTER_AUTH_SECRET` saat restart agar cookie yang masih sah tetap terbaca; rotasi direncanakan bersama pencabutan sesi.
 
@@ -78,6 +83,8 @@ Pada produksi, gunakan artefak bersih dengan environment host dan `npm run runti
 Sandi sementara acak tampil sekali setelah commit; serahkan melalui kanal internal, lalu admin harus menggantinya sebelum memakai CMS. Jangan simpan sandi pada laporan. Jika terminal terputus setelah commit, lakukan pemulihan ulang dengan alasan baru; jangan mencoba membaca hash sebagai sandi. Periksa metadata audit dan login/ganti sandi bersama petugas. CLI tidak mengaktifkan akun nonaktif atau memberi peran admin. Endpoint bypass dan akun pemulihan bawaan tidak disediakan; bootstrap hanya untuk instalasi tanpa admin aktif. Regresi sintetis lulus, sedangkan latihan dengan petugas pada staging tetap diperlukan.
 
 ## Backup dan retensi
+
+Pemindahan data PGlite ke PostgreSQL native memakai [alat transfer logis](PEMINDAHAN-DATA.md), dengan tujuan baru dan skema yang sama; sesi tidak dipindahkan. Prosedur ini terpisah dari backup/restore di bawah dan belum dijalankan pada data pengguna.
 
 Untuk PGlite pengembangan, gunakan [prosedur data lokal](DATA-LOKAL.md): hentikan aplikasi, backup database/media dengan kunci antarproses, lalu restore ke direktori baru dan cocokkan checksum. Hasil lokal tidak menggantikan backup terenkripsi serta latihan PostgreSQL native/staging berikut.
 

@@ -2,6 +2,8 @@
 
 Prosedur ini khusus PGlite pengembangan, bukan PostgreSQL staging/produksi. Pertahankan `.local/development-pg` dan cadangan pemulihan lama. Jangan mereset WAL, menghapus `.local`, atau mengulang bootstrap akun untuk memperbaiki startup.
 
+Untuk mempertahankan data lokal saat berpindah ke PostgreSQL native, gunakan [PEMINDAHAN-DATA.md](PEMINDAHAN-DATA.md). Alat transfer logis memakai skema yang sama dan tujuan baru; backup fisik dalam dokumen ini tetap khusus PGlite.
+
 ## Membuka dan menutup database
 
 Gunakan launcher proyek:

@@ -1,5 +1,106 @@
 # Verifikasi implementasi
 
+## Transfer melalui Docker Compose — 18 November 2026
+
+`tests/operational/transfer-compose.check.ts` menguji langkah operator pada dua project Compose terisolasi dengan data sintetis. Kedua kali build image aplikasi dan PostgreSQL/pgvector berhasil. Layanan `manage` menerapkan lima migrasi, memasang bundle baca saja, lalu mengimpor 26 baris dan 2 berkas ke database baru dan subdirektori volume media bersama. `manage check` dan health aplikasi lulus dengan override `MEDIA_DIRECTORY`.
+
+- Revisi terbit muncul pada artikel dan pencarian. Isi revisi draf tidak muncul pada halaman publik. Gambar publik dan PDF yang diunduh editor cocok byte per byte dengan sumber.
+- Akun editor dan admin hasil transfer bisa login ulang dan mendapat cookie dengan atribut Secure. Akses PDF menghasilkan 404 bagi pengunjung anonim dan admin akun. Seluruh pemeriksaan aplikasi diulang setelah `compose down` dan `up` dengan volume yang sama serta ID container baru.
+- Docker Desktop pada WSL diuji melalui `docker.exe` dan CLI Linux `docker`. Keduanya exit 0 serta menghapus container, jaringan dan volume fixture. Bukti privat masing-masing di `.local/transfer-compose-WqsxvE/result.json` dan `.local/transfer-compose-HQzw1N/result.json`. Image dan cache build dipertahankan.
+- Typecheck, 4/4 integrasi transfer, uji CLI PostgreSQL native, sintaks Bash panduan, dan `git diff --check` lulus. Bukti native `.local/transfer-native-Q7JwUl/result.json` mencatat kelulusan dan pembersihan fixture.
+
+Pemeriksa memakai HTTP pada loopback dan memasukkan cookie Secure secara eksplisit setelah login. HTTPS reverse proxy dan perilaku browser tidak diuji pada latihan ini. UAT, beban, restore staging, serta transfer data pengguna dan deployment cloud tetap terbuka. Key API AI dikosongkan dalam konfigurasi fixture. [Panduan pemindahan](PEMINDAHAN-DATA.md)
+
+## C3: transfer logis PGlite ke PostgreSQL — 17 November 2026
+
+Pengguna memilih kelanjutan persiapan pemindahan data ke cloud. `scripts/transfer-local.ts` / `npm run db:transfer` menambahkan ekspor sumber terkunci dan impor berparameter pada database native baru dengan migrasi/kolom yang sama. ID/nilai 16 tabel aplikasi, kredensial, revisi/kontributor, publikasi/proyeksi, audit, media/PDF, vector dan biaya AI dipertahankan. Session/Verification/RateLimit tidak diekspor; histori migrasi dan satu audit migrasi bawaan tujuan tetap utuh. Panduan host/Compose dan batas ada di [PEMINDAHAN-DATA.md](PEMINDAHAN-DATA.md).
+
+| Pemeriksaan | Hasil aktual dan batas |
+| --- | --- |
+| Unit | **33/33 lulus**, exit 0, sekitar 21 detik di luar sandbox. Tidak ada unit baru karena logika transfer diuji dengan database/berkas nyata pada integrasi |
+| Integrasi penuh | **68/68 lulus**, exit 0, sekitar 151 detik di luar sandbox. Empat kasus transfer memeriksa seluruh nilai/relasi, sumber tidak berubah, hash sandi tetap bisa diverifikasi, JSON/bigint >2^53, vector 1.536 dimensi, PDF/gambar dan izin 0700/0600. Kasus negatif mencakup sumber aktif/belum ada, path publik/alias/symlink, media hilang, perubahan checksum/berkas tambahan, skema berbeda, foreign key, persetujuan sendiri, kolom yang akan hilang diam-diam, database berisi/tujuan media sudah ada, rollback dan status CLI 0/1. Regresi CMS, autentikasi, lifecycle/kunci, migrasi dan backup tetap lulus |
+| Regresi status SQL | **1/1 lulus**, exit 0, sesudah kegagalan direproduksi. Penolakan unique constraint melalui pool tetap menghasilkan SQLSTATE 23505 dan data utuh tanpa mengubah status aplikasi `undefined`/1/2. Pemulihan dilakukan sinkron sebelum handler kueri aplikasi berjalan, agar status kegagalan aplikasi tidak ditimpa |
+| Native transfer | **Empat fase lulus, exit 0:** PostgreSQL/pgvector dengan lima migrasi melalui role `jafa` non-superuser; CLI impor asli dan perbandingan 16 tabel/PDF/gambar/hash/vector; penolakan impor ulang tanpa perubahan; persistensi seluruh nilai setelah restart. Target database/role dibuat oleh fixture sendiri, tanpa key AI. Satu audit migrasi baru tujuan menambah jumlah audit tanpa menghapus histori sumber |
+| Tipe/CLI | Typecheck dan `npm run db:transfer -- --help` lulus, exit 0. Tidak ada dependensi atau migrasi skema baru; helper path/inventaris backup yang sudah ada dipakai ulang |
+
+Percobaan awal menemukan dua hal: database baru mempunyai audit migrasi otomatis yang perlu dipertahankan, dan error SQL PGlite mengubah `process.exitCode` menjadi 100 walaupun rollback/semua asersi transfer lulus. Regresi SQL terpisah gagal `100 !== undefined` sebelum perbaikan, lalu lulus setelah adapter `LocalPgStream` memulihkan status host di sekitar pemanggilan protokol sinkron. Suite lengkap di atas lulus setelah perbaikan; status SQL/error tidak disembunyikan.
+
+Pada sandbox, unit awal **32/33** dan integrasi **66/68** gagal pada asersi stdout tes CLI lama yang menerima string kosong. Unit terarah lama juga mereproduksi masalah tanpa kode transfer. Pengulangan lengkap dengan izin eksekusi di luar sandbox menghasilkan **33/33 dan 68/68**, exit 0, tanpa perubahan tes lama untuk melemahkan asersi. CLI baru memverifikasi exit/artefak; pemeriksa native menyimpan stdout/stderr per perintah ke berkas privat.
+
+Native pertama sudah membuktikan impor/penolakan, tetapi pemeriksaan segera setelah restart gagal `ECONNREFUSED`. Harness kini membaca ulang port acak dan menunggu database siap setelah restart. Pengulangan final lulus; bukan perubahan retry aplikasi. `.local/transfer-native-ncm8YL/result.json` mencatat percobaan pertama `passed=false` dan resource container/volume sudah dibersihkan. `.local/transfer-native-yfkrET/result.json` mencatat final `passed=true`, `isolatedResourcesRemoved=true`, `fixtureRemoved=true`; image/cache dipertahankan.
+
+Log unit/integrasi/typecheck, reproduksi SQL sebelum/sesudah, serta log native berada di `.local/data-transfer-20261117-VdC43G/`. Sumber/media/akun pengguna tidak dibuka atau dipindahkan, `.env` tidak diubah dan tidak ada API berbayar. Source sebelumnya yang belum di-commit dipertahankan.
+
+Delapan dokumen yang berubah: **111 tautan lokal valid** dan **32 blok Bash lolos `bash -n`**, tanpa menjalankan contoh maintenance/Compose. `git diff --check` lulus.
+
+Tidak mengulang build aplikasi/image aplikasi, browser/E2E, HTTPS native R3 atau UAT. Target image database dibangun dari cache untuk pemeriksa transfer. Mount/override Compose pada runbook belum dieksekusi; belum ada migrasi data pengguna, cloud/staging, uji beban, backup terenkripsi/terjadwal, restore staging atau kesiapan produksi. Batas data logis 256 MiB/manifest 8 MiB dan kemungkinan media parsial saat kegagalan tetap berlaku.
+
+## Tinjauan konteks dan jalur cloud — 17 November 2026
+
+Audit dokumen/kode/konfigurasi lokal dan artefak yang sudah ada; **tidak menjalankan ulang unit, integrasi, browser, build atau native**, tidak membuka database pengguna dan tidak mengakses akun cloud/API berbayar. Hasil pengujian R4a/R3 di bawah tetap bertanggal 16 November.
+
+- `package.json`, evaluator, konfigurasi/gate RAG, adapter PGlite, skema/migrasi serta Docker/Compose cocok dengan status implementasi yang dicatat. Ringkasan bukti R4a 33 unit/63 integrasi/13 lifecycle/2 CLI final dan native R3 tujuh fase tersedia pada `.local`.
+- Metadata `.env` lokal menunjukkan PGlite dan pratinjau aktif, RAG mati, serta key/model generatif dan anggaran lengkap belum tersedia. Tidak mencetak/menyalin nilai rahasia. Ini tidak memverifikasi environment proses berjalan atau cloud.
+- Working tree masih mempunyai perubahan dan sumber/migrasi baru yang belum di-commit. Kelanjutan di folder sama dapat memakai berkas yang ada; clone dari commit lama belum memuatnya. Bukti `.local`, data/media, `.env` dan tooling agen diabaikan Git dan memerlukan penanganan terpisah.
+- Prosedur backup lokal khusus PGlite; belum ditemukan transfer logis seluruh data ke PostgreSQL native yang teruji. Jalur data produksi baru versus mempertahankan data lokal kini dicatat sebagai keputusan sebelum migrasi cloud.
+- `CONTEXT.md` diringkas menjadi status aktif, keputusan, batas bukti dan pekerjaan berikutnya. Riwayat dipertahankan pada `RIWAYAT-CONTEXT-20261116.md`; `JALUR-DEPLOY.md` memisahkan tahap portal/cloud dari evaluasi RAG. Ini tidak menutup gerbang staging, substansi, keamanan/aksesibilitas, backup/restore, UAT atau produksi.
+
+Verifikasi audit dibatasi pada konsistensi berkas/tautan/bukti serta `git diff --check`; tidak ada klaim audit menyeluruh atau kesiapan deploy. Berkas `.env` hanya dibaca untuk metadata dan tidak diubah. Manifest `.local/context-audit-20261117-I9cX6H/result.json` mencatat 117 tautan lokal yang diperiksa, kecocokan angka bukti lama dan fingerprint sumber/dokumen tanpa rahasia.
+
+## R4a: evaluasi kata kunci dan status CLI — 16 November 2026
+
+`scripts/evaluate-rag.ts` / `npm run rag:evaluate` menambahkan evaluator pertanyaan acuan, revisi/halaman dan laporan privat. Pencarian memakai `null` untuk menonaktifkan penyedia embedding secara eksplisit. Dataset, cara menjalankan, metrik dan batas ada di [EVALUASI-RAG.md](EVALUASI-RAG.md). Ini persiapan alat R4; AI publik tetap mati, dan kualitas semantik/generasi/PDF resmi belum dinilai.
+
+| Pemeriksaan | Hasil aktual dan batas |
+| --- | --- |
+| Unit | **33/33 lulus**, exit 0. Tambahan format/ukuran dataset, kontrol positif, ID/acuan duplikat, input/error tanpa data mentah, pemisahan revisi/halaman, duplikat potongan, batas enam hasil, Recall dan MRR dengan denominator yang tepat |
+| Integrasi penuh | **63/63 lulus**, exit 0. Evaluasi membaca indeks disetujui dengan key/anggaran aktif tanpa memanggil fetch atau menulis ledger AI; acuan ditarik ditolak. CLI nyata membuat laporan 0700/0600, menolak overwrite/path publik/alias symlink/input salah sebelum membuka database, keluar 2 untuk acuan terlewat dan mempertahankan isi database. Regresi CMS/peran/publikasi/media, akun, migrasi, backup/restore dan kunci/restart tetap lulus |
+| Lifecycle/CLI terarah | **13/13 lulus**, exit 0. Normal exit, status 1/2, SIGINT/SIGTERM, SIGKILL/pemilik baru, pelepasan listener/kunci serta CLI laporan diperiksa memakai database temporer |
+| Tipe/perintah | Typecheck final dan `npm run rag:evaluate -- --help` lulus, exit 0. Setelah guard `PG_VERSION` ditambahkan, **2/2 CLI final lulus**: database lokal yang belum ada ditolak tanpa membuat direktori data/laporan, dan jalur sukses tetap bekerja. Tidak ada migrasi, dependency, model atau tarif baru |
+| Demo sumber → laporan | **Lulus self-check**, exit 0 untuk harness; CLI di dalamnya **exit 2 sesuai ekspektasi**. PDF sintetis benar-benar diekstrak, diajukan/disetujui petugas berbeda dan diindeks tanpa embedding pada DB sementara. Tiga kasus menghasilkan 1/2 halaman acuan ditemukan (Recall/MRR 0,5), karena satu kasus sengaja tidak cocok. `providerCalls=0`, `generationEvaluated=false`, `betaReady=false`; tidak mengklaim fallback generatif lulus. DB/media temporer dibersihkan |
+
+Percobaan awal **46/47 integrasi terarah**: isi laporan benar tetapi exit 2 tertimpa 0. Probe raw PGlite menunjukkan `process.exitCode=99` setelah inisialisasi dan mengubah status aplikasi 2 menjadi 0 saat close (`pglite-exit-probe.log`). Perbaikan awal yang hanya menjaga status saat close menyebabkan enam regresi normal exit (**57/63**); adapter kini menjaga status host pada **buka dan tutup**, tanpa pengecualian angka 99. Hasil akhir 13/13 terarah dan 63/63 penuh lulus. Pelepasan kunci serta propagasi error tidak dilonggarkan. Satu error tipe array kosong diperbaiki dengan tipe return helper yang eksplisit. Demo awal melalui stdin terhenti pada worker PDF; demo dari berkas berhasil, tanpa perubahan parser produk.
+
+Artefak privat `.local/rag-r4a-BV3jg0/`: diff/sumber awal, `unit-final.log`, `integration-complete.log`, `lifecycle-cli.log`, `cli-final.log`, `typecheck-final.log`, `help.log`, probe dan `result.json`. Demo yang dapat ditinjau pada `demo-final/source.pdf`, `demo-final/cases.json` dan `demo-final/report/report.json`; isinya sintetis, bukan peraturan nyata. Database/media/akun pengguna tidak dibuka atau dimigrasikan; `.env` tidak diubah dan tidak ada API berbayar.
+
+Browser, build dan PostgreSQL native tidak diulang untuk paket CLI/adapter lokal ini. Bukti R3 di bawah tetap historis. Belum ada korpus PDF resmi, benchmark semantik, panggilan model generatif nyata, ketepatan hukum, penilaian substansi/ambang beta, pembaca layar/perangkat nyata, beban/staging, UAT atau deployment yang dinyatakan selesai. Peringatan antrean query `pg` yang sudah dikenal tetap muncul.
+
+## R3: jawaban/kutipan dan anggaran bersama — 16 November 2026
+
+Implementasi lokal memakai `/api/rag`, adapter Responses API awal, validasi rujukan/sumber aktual, panel FAQ/AI dan ledger `AiUsageMonth`. **AI tetap mati secara default**, model/anggaran/tarif/key pengguna tidak diisi dan tidak ada panggilan berbayar. Konfigurasi dan batas di [ASISTEN-RAG.md](ASISTEN-RAG.md).
+
+| Pemeriksaan | Hasil aktual dan batas |
+| --- | --- |
+| Unit | **31/31 lulus**, exit 0. Tambahan konfigurasi fail-closed, USD mikro tanpa float, batas byte konteks, status/halaman dan struktur request tanpa tools/riwayat provider |
+| Integrasi | **59/59 penuh final lulus**, exit 0. Reservasi lebih besar dari cap ditolak sebelum provider; delapan permintaan bersamaan hanya menerima dua sesuai anggaran; refund usage sah, timeout tetap menahan biaya, usage melampaui batas ditolak. Dua dari tiga permintaan RAG aktif diterima. Kutipan sumber disetujui, penarikan saat generasi, ID/URL rekaan, respons parsial/refusal/provider gagal, bukti kurang, input/origin/riwayat/rate limit, embedding dengan anggaran/cache serta backup/restore **20 tabel** diperiksa. Transport provider palsu, tanpa jaringan/API berbayar |
+| Browser | **4/4 RAG lulus**, exit 0, 3,1 menit; **4/4 regresi FAQ lulus** pada run sebelumnya. Desktop/mobile: pilihan asal jawaban, privasi, status/halaman/teks/tautan, teks HTML tidak dieksekusi, input tetap saat provider gagal, fallback, reset/stale response. Endpoint AI dipalsukan di browser; server E2E tetap mengunci key kosong/flag mati. Capture tambahan **2/2 lulus**, exit 0, 2,8 menit: kutipan dan tautan sumber dapat digulir hingga terlihat; screenshot 1440/768/320 CSS px ditinjau. Ini bukan uji zoom/pembaca layar/perangkat nyata baru |
+| Tipe/UI | Typecheck final mandiri dan lint UI lulus, exit 0. Tidak mengubah font/palet/shell portal; perubahan terbatas panel asisten yang ada |
+| Native/build | **Lulus, exit 0, tujuh fase.** Kedua image dibangun; kompilasi Next 10,0 detik dan TypeScript 19,0 detik. PostgreSQL 17 + pgvector 0.8.7 menerima lima migrasi sebagai role `jafa` non-superuser. Enam fase CMS/media/PDF sebelumnya termasuk indeks otomatis, pencarian kata kunci/vektor dan penarikan lulus; fase ketujuh memeriksa flag AI mati, origin asing dan ledger reservasi/refund/penolakan cap. Key dikunci kosong. `.local/native-runtime-5hEJIe/result.json`: `passed=true`, `isolatedResourcesRemoved=true`; resource project `jafa-native-check-6c1e4201f73a` dibersihkan, image/cache dipertahankan. Ini menutup native R2b, tanpa membuktikan generasi API nyata atau konkurensi ledger native |
+
+Percobaan awal: unit 30/31 karena proses CLI dalam sandbox memberi stdout kosong; pengulangan di luar pembatasan proses 31/31 lulus, tanpa perubahan kode CLI. Integrasi awal tertahan pada tes konkurensi; pengujian terarah mengungkap ekspresi SQL dua parameter `unknown - unknown`, diperbaiki dengan pengurangan BigInt sebelum binding. Fixture dilengkapi ringkasan/isi/sumber dan teks unik agar cache dari kasus sebelumnya tidak mengubah ekspektasi. Setelah perbaikan, suite penuh 59/59 lulus; pemeriksaan tambahan konkurensi/usage juga tercakup pada run lengkap final. Browser awal 4/8: empat FAQ lulus, empat RAG gagal pada locator label select; locator diganti peran combobox dan pengulangan RAG 4/4 lulus. Tidak mengubah produk atau menaikkan timeout untuk melewati locator.
+
+Artefak privat `.local/rag-r3-stEt90/` menyimpan diff awal, log unit/integrasi/typecheck/UI/native, `e2e/` awal, `e2e-rag-final/`, `e2e-capture/` dan ringkasan `result.json`. Bukti native/build pada `.local/native-runtime-5hEJIe/`. Fixture sintetis; trace dapat berisi sesi sintetis dan perlu ditinjau sebelum dibagikan. Database pengembangan/media/akun pengguna tidak dibuka atau dimigrasikan. Backup sebelum launcher dev berikutnya menerapkan migrasi baru. Suite browser penuh, API/model nyata, PDF resmi/kalibrasi, R4 substansi, audit independen, pembaca layar/perangkat nyata, beban dan backup/restore staging serta UAT tidak diklaim selesai.
+
+## R2b: indeks dan retrieval sumber PDF — 13 November 2026
+
+Tambahan 16 November: pemeriksa native paket R3 di atas membuktikan image pgvector, migrasi non-superuser, `after()` produksi, retrieval dan penarikan R2b; exit 0 dan cleanup lulus. Batas native pada hasil 13 November di bawah adalah catatan historis, bukan pekerjaan yang masih tertunda.
+
+Keputusan pengguna 13 November: cakupan penuh (kata kunci + makna), embedding OpenAI `text-embedding-3-small` (1.536 dimensi), serta sumber berstatus **Dicabut** dikeluarkan dari retrieval; status **Diubah** tetap dicari dengan label. Implementasi menambah migrasi `202611130001_knowledge_index` (extension `vector` + tabel `KnowledgeChunk`), `src/lib/knowledge.ts`, pemicu indeks sesudah persetujuan sumber, serta perintah `npm run rag:index`/`runtime index`. API key belum dipasang dan **tidak ada panggilan API berbayar**. Alur di [DOKUMEN-PDF.md](DOKUMEN-PDF.md#indeks-dan-retrieval-r2b).
+
+| Pemeriksaan | Hasil aktual dan batas |
+| --- | --- |
+| Unit | **29/29 lulus**, exit 0. Dua kasus baru: potongan tidak melintasi halaman, dimulai pada baris "Pasal N" yang terdeteksi, maksimal 1.200 karakter tanpa memotong kata, checksum stabil; kata kunci membuang kata umum tetapi mempertahankan singkatan/nomor peraturan |
+| Integrasi | **54/54 lulus**, exit 0. Kasus baru memakai PDF sintetis dan embedder palsu berbasis kata, tanpa jaringan: tanpa key potongan dibuat dan pencarian kata kunci berjalan; satu panggilan untuk dua teks unik dan pengulangan tidak memanggil penyedia; revisi baru dengan PDF sama memakai ulang vektor; Diubah dicari berlabel, Dicabut tidak dipotong/di-embed/dicari; penarikan langsung keluar dari hasil walau vektor tetap tersimpan; penyedia gagal menghentikan putaran, pencarian kembali ke kata kunci, putaran berikut melanjutkan. Backup/restore lokal kini membandingkan **19 tabel** termasuk kolom vector |
+| Browser | **2/2 terarah** `documents.spec.ts` lulus (desktop/mobile), exit 0, 3,7 menit. Persetujuan PDF pada server Next nyata kini memicu indeks lewat `after()` tanpa mengubah alur/pesan. Server E2E memaksa `OPENAI_API_KEY` kosong |
+| Tipe/build | Typecheck lulus, exit 0. Build produksi terisolasi lulus: kompilasi 8,2 detik, TypeScript 14,1 detik; workspace dibersihkan |
+| Native HTTPS | **Belum dijalankan**: Docker Desktop tidak aktif saat pemeriksaan (pipe engine tidak ditemukan). Pemeriksa sudah ditambah override Compose yang mengunci key kosong, potongan otomatis setelah persetujuan, pencarian kata kunci/vektor sebagai role `jafa`, dan hasil kosong setelah penarikan. Image PostgreSQL + pgvector, migrasi oleh role non-superuser dan `after()` pada image produksi **belum terbukti** |
+
+Percobaan integrasi awal **53/54**: asersi tes ikut menghitung embedding pertanyaan sebagai panggilan indeks. Embedder pertanyaan dipisah dari penghitung; kode produk tidak diubah. Peringatan deprecation `pg` (query bersamaan pada satu client) sudah tercatat pada log R2a, bukan dari paket ini.
+
+Artefak privat `.local/rag-r2b-KYiUjTQM/` menyimpan log typecheck, unit, integrasi, E2E dan build. Fixture seluruhnya sintetis.
+
+Batas: PDF resmi, API key, kalibrasi ukuran potongan/jumlah hasil/peringkat, pertanyaan acuan, korpus besar serta indeks GIN/HNSW belum ada. Database pengembangan pengguna tidak dibuka atau dimigrasikan; `npm run dev` berikutnya menerapkan extension dan tabel baru. R3 (jawaban, kutipan, fallback, batas biaya) dan R4 (evaluasi) belum dimulai.
+
 ## R2a: sumber PDF privat dan persetujuan — 12 November 2026
 
 Implementasi menambah jenis `knowledge`, tiga tabel dokumen, endpoint PDF terpisah dari gambar, worker PDF.js **6.5.438**, serta modul CMS **Sumber PDF**. Revisi dan persetujuan memakai layanan/contributor/audit yang sama. PDF tetap privat sesudah persetujuan, tidak mempunyai URL portal, dan tidak masuk proyeksi pencarian/sitemap atau hitungan konten terbit. Tidak ada pgvector, embedding, retrieval atau API generatif yang diaktifkan. Panduan di [DOKUMEN-PDF.md](DOKUMEN-PDF.md).

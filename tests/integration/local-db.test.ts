@@ -57,6 +57,35 @@ test("konstruksi dan penutupan tanpa kueri tidak membuka engine atau membuat dir
   await assert.rejects(local.engine, /closed/);
 });
 
+test("penutupan PGlite mempertahankan status kegagalan CLI", async () => {
+  const original = process.exitCode;
+  for (const code of [1, 2]) {
+    const local = createLocalDatabase();
+    try {
+      await (await local.engine).query("SELECT 1");
+      assert.equal(process.exitCode, original);
+      process.exitCode = code;
+      await local.close();
+      assert.equal(process.exitCode, code);
+    } finally {
+      try { await local.close(); } finally { process.exitCode = original; }
+    }
+  }
+});
+
+test("kesalahan SQL melalui pool tidak mengubah status proses aplikasi", async () => {
+  const original = process.exitCode, local = createLocalDatabase();
+  try {
+    await local.pool.query("CREATE TABLE exit_check (id int PRIMARY KEY); INSERT INTO exit_check VALUES (1)");
+    for (const code of [undefined, 1, 2]) {
+      process.exitCode = code;
+      await assert.rejects(local.pool.query("INSERT INTO exit_check VALUES (1)"), error => (error as { code: string }).code === "23505");
+      assert.equal(process.exitCode, code);
+      assert.equal((await local.pool.query("SELECT count(*)::int AS count FROM exit_check")).rows[0].count, 1);
+    }
+  } finally { try { await local.close(); } finally { process.exitCode = original; } }
+});
+
 test("kunci tidak dikenal ditolak tanpa dihapus", async t => {
   const { directory, lock } = await temporary(t);
   await mkdir(lock);

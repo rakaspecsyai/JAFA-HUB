@@ -63,7 +63,10 @@ try {
   env = { ...env, ...fixture };
   const envFile = join(directory, "fixture.env");
   await writeFile(envFile, Object.entries(fixture).map(([key, value]) => `${key}=${value}`).join("\n"), { mode: 0o600 });
-  composeArgs = ["compose", "--project-name", project, "--env-file", await cliPath(envFile), "-f", await cliPath(resolve("compose.yaml"))];
+  // Nilai literal tidak diinterpolasi dari shell/Windows, sehingga pemeriksa tidak pernah memakai key berbayar.
+  const noPaidApi = join(directory, "no-paid-api.yaml");
+  await writeFile(noPaidApi, 'services:\n  app:\n    environment:\n      OPENAI_API_KEY: ""\n      JAFA_RAG_ENABLED: "false"\n  manage:\n    environment:\n      OPENAI_API_KEY: ""\n      JAFA_RAG_ENABLED: "false"\n', { mode: 0o600 });
+  composeArgs = ["compose", "--project-name", project, "--env-file", await cliPath(envFile), "-f", await cliPath(resolve("compose.yaml")), "-f", await cliPath(noPaidApi)];
   await compose(["config", "--quiet"]);
   for (const args of [["ps", "-aq"], ["volume", "ls", "-q"], ["network", "ls", "-q"]]) {
     assert.equal(await run(docker, [...args, "--filter", `label=com.docker.compose.project=${project}`]), "", "Nama resource uji sudah digunakan.");
@@ -265,11 +268,19 @@ try {
   assert.equal((await approver.request.get(`/api/documents/${documentId}/file`)).status(), 200);
   assert.ok(!(await (await visitor.request.get("/sitemap.xml")).text()).includes(pdfSlug));
   await database(`const asset = await db.documentAsset.findUniqueOrThrow({where:{id:${JSON.stringify(documentId)}},include:{pages:{orderBy:{number:'asc'}}}}); assert.equal(asset.pageCount,2); assert.equal(asset.pages[1].text,${JSON.stringify(pdfText[1])}); const item=await db.contentItem.findUniqueOrThrow({where:{kind_slug:{kind:'knowledge',slug:${JSON.stringify(pdfSlug)}}}}); assert.ok(item.publishedRevisionId); assert.equal(await db.publishedSearchEntry.findUnique({where:{itemId:item.id}}),null);`);
+  await database(`const item = await db.contentItem.findUniqueOrThrow({where:{kind_slug:{kind:'knowledge',slug:${JSON.stringify(pdfSlug)}}}}); let chunks = []; for (let i = 0; i < 60 && chunks.length < 2; i++) { chunks = await db.knowledgeChunk.findMany({where:{revisionId:item.publishedRevisionId},orderBy:{position:'asc'}}); if (chunks.length < 2) await new Promise(r => setTimeout(r, 500)); } assert.deepEqual(chunks.map(c => [c.pageNumber, c.text, c.model]), [[1, ${JSON.stringify(pdfText[0])}, null], [2, ${JSON.stringify(pdfText[1])}, null]]); const vector = Array(1536).fill(0); vector[7] = 1; await db.$executeRawUnsafe('UPDATE "KnowledgeChunk" SET model = $1, embedding = $2::vector WHERE id = $3::uuid', 'text-embedding-3-small', '[' + vector.join(',') + ']', chunks[1].id); const { retrieveKnowledge } = await import('./src/lib/knowledge.ts'); const found = await retrieveKnowledge('halaman kedua', async texts => texts.map(() => vector)); assert.equal(found.semantic, true); assert.equal(found.items[0].id, chunks[1].id); assert.deepEqual((await retrieveKnowledge('pertama')).items.map(hit => hit.id), [chunks[0].id]);`);
   await pdfReviewer.getByText("Tarik sumber dari korpus", { exact: true }).click();
   await pdfReviewer.getByLabel("Alasan penarikan", { exact: true }).fill("Tinjauan ulang fixture PDF native.");
   await action(pdfReviewer, "Tarik sumber PDF"); await expect(pdfReviewer.getByRole("status").filter({ hasText: "Sumber ditarik dari korpus" })).toBeVisible();
   assert.equal((await visitor.request.get(`/api/documents/${documentId}/file`)).status(), 404);
-  done("PDF native: worker produksi, migrasi, ekstraksi/halaman, persetujuan/penarikan dan file tetap privat lulus.");
+  await database(`const { retrieveKnowledge } = await import('./src/lib/knowledge.ts'); const vector = Array(1536).fill(0); vector[7] = 1; assert.deepEqual((await retrieveKnowledge('halaman kedua', async texts => texts.map(() => vector))).items, []);`);
+  done("PDF native: worker produksi, migrasi pgvector oleh role non-superuser, ekstraksi/halaman, persetujuan, potongan indeks otomatis, pencarian kata kunci/vektor, penarikan dan file tetap privat lulus.");
+  assert.deepEqual(await (await visitor.request.get("/api/rag")).json(), { enabled: false });
+  assert.equal((await post(visitor, "/api/rag", { question: "Pertanyaan sintetis native" }, "https://asing.invalid")).status(), 403);
+  const ragDisabled = await post(visitor, "/api/rag", { question: "Pertanyaan sintetis native" });
+  assert.equal(ragDisabled.status(), 200); assert.equal((await ragDisabled.json()).reason, "disabled");
+  await database(`const {withAiBudget} = await import('./src/lib/ai-usage.ts'); const budget = {monthly:2n,input:1000000n,output:1000000n,embedding:1000000n}; await withAiBudget(budget,{input:2,output:0,embedding:0},async record=>record({input:1,output:0,embedding:0})); await assert.rejects(withAiBudget(budget,{input:2,output:0,embedding:0},async()=>assert.fail('Anggaran seharusnya ditolak')), {status:429}); const usage=await db.aiUsageMonth.findUniqueOrThrow({where:{month:new Date().toISOString().slice(0,7)}}); assert.equal(usage.costMicrousd,1n); assert.equal(usage.inputTokens,1n); assert.equal(usage.requests,1);`);
+  done("R3 native: fitur AI mati tanpa konfigurasi, origin asing ditolak dan reservasi/pencatatan anggaran memakai role non-superuser tanpa API berbayar.");
   for (const ctx of [visitor, editor, approver, admin]) await ctx.tracing.stop();
   passed = true;
 } finally {

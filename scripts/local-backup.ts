@@ -13,7 +13,7 @@ const manifestSchema = z.object({
 }).strict();
 type FileDigest = z.infer<typeof manifestSchema>["files"][number];
 
-async function canonical(path: string) {
+export async function canonical(path: string) {
   const absolute = resolve(path);
   try { return await realpath(absolute); }
   catch (error) {
@@ -22,7 +22,7 @@ async function canonical(path: string) {
   }
 }
 
-function separated(paths: string[]) {
+export function separated(paths: string[]) {
   for (const [index, outer] of paths.entries()) {
     for (const inner of paths.slice(index + 1)) {
       const nested = (a: string, b: string) => {
@@ -34,7 +34,7 @@ function separated(paths: string[]) {
   }
 }
 
-async function inventory(root: string, prefix: string): Promise<FileDigest[]> {
+export async function inventory(root: string, prefix: string): Promise<FileDigest[]> {
   const files: FileDigest[] = [];
   const entries = (await readdir(join(root, prefix), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, "en"));
   for (const entry of entries) {

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { Pool, type PoolConfig } from "pg";
 import { PGlite } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite/vector";
 import { lockLocalDirectory } from "./local-db-lock";
 
 // shortcut: the embedded PostgreSQL engine serves local development; use native PostgreSQL for production and load tests.
@@ -15,7 +16,12 @@ class LocalPgStream extends Duplex {
   ref() { return this; }
   unref() { return this; }
   _write(chunk: Buffer, _: BufferEncoding, callback: (error?: Error | null) => void) {
-    this.engine().then(engine => engine.runExclusive(() => engine.execProtocolRawStream(chunk, { onRawData: data => { this.push(Buffer.from(data)); } })))
+    this.engine().then(engine => engine.runExclusive(() => {
+      const exitCode = process.exitCode;
+      // Error SQL WASM mengubah exitCode secara sinkron; pulihkan sebelum handler kueri aplikasi berjalan.
+      try { return engine.execProtocolRawStream(chunk, { onRawData: data => { this.push(Buffer.from(data)); } }); }
+      finally { process.exitCode = exitCode; }
+    }))
       .then(() => callback(), error => callback(error));
   }
   _final(callback: (error?: Error | null) => void) { this.push(null); callback(); }
@@ -25,12 +31,15 @@ export function createLocalDatabase(directory?: string) {
   let engine: Promise<PGlite> | undefined;
   let closing: Promise<void> | undefined;
   const open = async () => {
-    if (!directory) return PGlite.create();
-    const path = resolve(/* turbopackIgnore: true */ directory);
-    await mkdir(path, { recursive: true });
-    release = await lockLocalDirectory(path);
-    try { return await PGlite.create(path); }
-    catch (error) { await release(); throw error; }
+    const exitCode = process.exitCode;
+    try {
+      if (!directory) return await PGlite.create({ extensions: { vector } });
+      const path = resolve(/* turbopackIgnore: true */ directory);
+      await mkdir(path, { recursive: true });
+      release = await lockLocalDirectory(path);
+      try { return await PGlite.create(path, { extensions: { vector } }); }
+      catch (error) { await release(); throw error; }
+    } finally { process.exitCode = exitCode; }
   };
   const getEngine = () => {
     if (engine) return engine;
@@ -45,7 +54,10 @@ export function createLocalDatabase(directory?: string) {
     try { await pool.end(); }
     finally {
       if (engine) {
-        await (await engine).close();
+        const exitCode = process.exitCode;
+        // Siklus PGlite/WASM mengubah exitCode host; status proses aplikasi dipertahankan saat buka/tutup.
+        try { await (await engine).close(); }
+        finally { process.exitCode = exitCode; }
         await release?.();
       }
     }

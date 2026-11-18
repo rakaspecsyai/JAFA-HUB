@@ -1,11 +1,11 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { createMemoryPool } from "./memory-pool";
 import type { DraftInput } from "../../src/lib/content-service";
-import { payloadSchema, type Payload, type Staff } from "../../src/lib/content-types";
+import { normalizeQuery, payloadSchema, type Payload, type Staff } from "../../src/lib/content-types";
 import { initialContent } from "../../src/lib/fixtures";
 import { hashPassword, verifyPassword } from "../../src/lib/passwords";
 import { credentialUser } from "../../src/lib/credentials";
@@ -15,6 +15,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerSecurityTests } from "./security";
+import { registerRagTests } from "./rag";
 import { AppError, publicError } from "../../src/lib/errors";
 import { pdfFixture } from "../fixtures/pdf";
 
@@ -32,7 +33,7 @@ before(async () => {
   memory = await createMemoryPool();
   await applyLocalMigrations(memory.engine);
   await applyLocalMigrations(memory.engine);
-  assert.equal((await memory.engine.query('SELECT * FROM "_prisma_migrations"')).rows.length, 3);
+  assert.equal((await memory.engine.query('SELECT * FROM "_prisma_migrations"')).rows.length, 5);
   db = new PrismaClient({ adapter: new PrismaPg(memory.pool) });
   (globalThis as unknown as { jafaDb: PrismaClient }).jafaDb = db;
   const passwordHash = await hashPassword("integration-password-123");
@@ -559,4 +560,73 @@ test("kegagalan audit PDF membatalkan metadata/halaman dan membersihkan file bar
   } finally { if (previousMedia === undefined) delete process.env.MEDIA_DIRECTORY; else process.env.MEDIA_DIRECTORY = previousMedia; await rm(directory, { recursive: true, force: true }); }
 });
 
+test("indeks PDF idempoten, memakai ulang embedding, mengeluarkan Dicabut/penarikan, dan pulih dari penyedia gagal", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "jafa-knowledge-index-")), previousMedia = process.env.MEDIA_DIRECTORY, previousKey = process.env.OPENAI_API_KEY;
+  process.env.MEDIA_DIRECTORY = directory; delete process.env.OPENAI_API_KEY;
+  try {
+    const { storeDocument } = await import("../../src/lib/documents");
+    const knowledge = await import("../../src/lib/knowledge");
+    // Embedder palsu berbasis kata: kemiripan makna dapat diperiksa tanpa jaringan atau biaya.
+    const calls: string[][] = [];
+    const vector = (text: string) => { const values = Array<number>(1536).fill(0); values[0] = 0.01; for (const word of normalizeQuery(text).match(/\p{L}+/gu) ?? []) values[1 + createHash("sha256").update(word).digest().readUInt16BE(0) % 1535] += 1; return values; };
+    const embed = async (texts: string[]) => { calls.push(texts); return texts.map(vector); };
+    const query = async (texts: string[]) => texts.map(vector);
+    const failing = async (): Promise<number[][]> => { throw new Error("HTTP 503"); };
+    const approve = async (pages: string[], regulationStatus: "current" | "amended" | "revoked") => {
+      const asset = await storeDocument(editor, new File([pdfFixture(pages)], "indeks.pdf", { type: "application/pdf" }));
+      const input = draft({ kind: "knowledge", payload: payloadSchema.parse({ title: "Sumber indeks sintetis", summary: "Ringkasan sumber sintetis", body: "", number: "UJI 2", year: "2026", publisher: "Instansi fixture", officialUrl: "https://www.djkn.kemenkeu.go.id/", statusNote: "Status fixture telah diperiksa.", regulationStatus, documentId: asset.id, documentReviewed: true }) });
+      const saved = await service.saveDraft(editor, input);
+      await service.submitRevision(editor, saved.itemId, saved.revisionId, saved.version);
+      await service.reviewRevision(approver, saved.itemId, saved.revisionId, saved.version + 1, "publish", "Fixture indeks diperiksa.");
+      return { input, ...saved };
+    };
+    const revisions = async (question: string) => (await knowledge.retrieveKnowledge(question, query)).items.map(hit => hit.revisionId);
+
+    const current = await approve(["Pasal 1 Penilai Pemerintah melakukan penilaian barang milik negara.", "Pasal 2 Pejabat Lelang menyusun risalah lelang."], "current");
+    assert.deepEqual(await knowledge.runIndexJobs(), { chunked: 1, embedded: 0, pending: 2 });
+    const keywordOnly = await knowledge.retrieveKnowledge("penilaian barang milik negara");
+    assert.equal(keywordOnly.semantic, false);
+    assert.deepEqual(keywordOnly.items.map(hit => [hit.revisionId, hit.pageNumber, hit.regulationStatus, hit.number]), [[current.revisionId, 1, "current", "UJI 2"]]);
+    assert.deepEqual(await knowledge.runIndexJobs(embed), { chunked: 0, embedded: 2, pending: 0 });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(await knowledge.runIndexJobs(embed), { chunked: 0, embedded: 0, pending: 0 });
+    assert.equal(calls.length, 1);
+    const semantic = await knowledge.retrieveKnowledge("siapa yang menyusun risalah", query);
+    assert.equal(semantic.semantic, true); assert.equal(semantic.items[0].pageNumber, 2);
+
+    const approved = await db.contentRevision.findUniqueOrThrow({ where: { id: current.revisionId } });
+    const next = await service.saveDraft(editor, { ...current.input, itemId: current.itemId, revisionId: current.revisionId, version: approved.version, payload: { ...current.input.payload, title: "Sumber indeks sintetis revisi" } });
+    await service.submitRevision(editor, next.itemId, next.revisionId, next.version);
+    await service.reviewRevision(approver, next.itemId, next.revisionId, next.version + 1, "publish", "Metadata fixture diperbarui.");
+    assert.deepEqual(await knowledge.runIndexJobs(embed), { chunked: 1, embedded: 0, pending: 0 });
+    assert.equal(calls.length, 1);
+    assert.deepEqual([...new Set(await revisions("penilaian barang"))], [next.revisionId]);
+
+    const amended = await approve(["Pasal 3 Risalah lelang ditandatangani pejabat lelang."], "amended");
+    const revoked = await approve(["Pasal 4 Risalah lelang lama sudah dicabut."], "revoked");
+    assert.deepEqual(await knowledge.runIndexJobs(embed), { chunked: 1, embedded: 1, pending: 0 });
+    assert.equal(calls.length, 2);
+    assert.equal(await db.knowledgeChunk.count({ where: { revisionId: revoked.revisionId } }), 0);
+    const risalah = (await knowledge.retrieveKnowledge("risalah lelang", query)).items;
+    assert.ok(risalah.some(hit => hit.revisionId === amended.revisionId && hit.regulationStatus === "amended"));
+    assert.ok(!risalah.some(hit => hit.revisionId === revoked.revisionId));
+
+    await service.withdrawContent(approver, current.itemId, next.revisionId, "Tinjauan ulang indeks fixture.");
+    assert.ok(!(await revisions("penilaian barang milik negara")).includes(next.revisionId));
+    assert.ok(await db.knowledgeChunk.count({ where: { revisionId: next.revisionId, model: { not: null } } }) > 0);
+
+    await approve(["Pasal 5 Penata Laksana Barang mengelola persediaan."], "current");
+    await assert.rejects(knowledge.runIndexJobs(failing), /HTTP 503/);
+    assert.equal((await knowledge.retrieveKnowledge("mengelola persediaan", failing)).semantic, false);
+    assert.equal((await knowledge.retrieveKnowledge("mengelola persediaan", failing)).items[0].pageNumber, 1);
+    assert.deepEqual(await knowledge.runIndexJobs(embed), { chunked: 0, embedded: 1, pending: 0 });
+    assert.equal(calls.length, 3);
+  } finally {
+    if (previousMedia === undefined) delete process.env.MEDIA_DIRECTORY; else process.env.MEDIA_DIRECTORY = previousMedia;
+    if (previousKey !== undefined) process.env.OPENAI_API_KEY = previousKey;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 registerSecurityTests(() => db);
+registerRagTests(() => db, () => ({ editor, approver }));

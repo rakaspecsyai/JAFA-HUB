@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM postgres:17-bookworm AS database
+# pgvector dari repositori PGDG bawaan image; extension dibuat superuser saat volume baru diinisialisasi.
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-17-pgvector \
+    && rm -rf /var/lib/apt/lists/*
 COPY --chmod=755 deploy/postgres-init.sh /docker-entrypoint-initdb.d/10-jafa.sh
 
 FROM node:22-bookworm-slim AS base

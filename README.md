@@ -2,6 +2,8 @@
 
 Portal pengetahuan jabatan fungsional DJKN berdasarkan [PRD-Jafa-Hub.md](PRD-Jafa-Hub.md) dan prototipe lokal. Dibangun dengan Next.js App Router, React, TypeScript, CSS Modules, Prisma, dan PostgreSQL.
 
+Serah-terima aktif: [CONTEXT.md](CONTEXT.md). Tahapan dari keputusan infrastruktur hingga staging dan produksi: [docs/JALUR-DEPLOY.md](docs/JALUR-DEPLOY.md). Kelanjutan 17 November menambah alat transfer data logis dan pengujian native terisolasi. Konfigurasi lokal pada audit hari itu masih memakai pratinjau prototipe, dan sejumlah sumber/migrasi baru belum di-commit.
+
 ## Menjalankan lokal
 
 Gunakan Node.js 22.22 atau lebih baru pada lini Node 22 yang didukung.
@@ -22,6 +24,8 @@ Perintah dev membuat `.env` beserta `AUTH_RATE_LIMIT_KEY` dan `BETTER_AUTH_SECRE
 Database lokal memakai PGlite, mesin PostgreSQL tertanam. Produksi tetap memakai PostgreSQL melalui `DATABASE_URL`; jalur tertanam dinonaktifkan pada `NODE_ENV=production`. Satu proses boleh membuka database lokal ini pada satu waktu. Hentikan dev sebelum menjalankan perintah bootstrap/impor yang membuka database yang sama.
 
 Pembukaan database persisten kini dilindungi kunci antarproses; launcher menutup engine pada worker pemilik sebelum keluar. Backup database beserta media dan restore ke direktori baru tersedia melalui `npm run local:backup -- <tujuan-baru>` serta `npm run local:restore -- <backup> <tujuan-baru>`. Prosedur, batas kunci, dan perlindungan cadangan privat ada di [docs/DATA-LOKAL.md](docs/DATA-LOKAL.md).
+
+Persiapan pemindahan data ke PostgreSQL native tersedia melalui `npm run db:transfer -- export <bundle-baru>` dan `npm run db:transfer -- import <bundle> <media-baru>`. Alat mempertahankan akun, revisi, audit, media, dan PDF. Pengelola login ulang setelah transfer. Prosedur host dan Compose sudah diuji dengan data sintetis pada database tujuan baru yang sudah dimigrasikan. [Panduan pemindahan data](docs/PEMINDAHAN-DATA.md)
 
 ## Pratinjau dan publikasi
 
@@ -63,12 +67,12 @@ Jika semua admin kehilangan akses, petugas teknis memakai `npm run admin:recover
 - `/informasi` dan tiga profil: definisi, jenjang, tugas, kompetensi, nomenklatur, sumber, artikel, FAQ.
 - `/insight` dan `/insight/[slug]`: filter bidang/jenis, paginasi, isi dan rujukan artikel.
 - `/regulasi`: nomor/judul, filter, catatan status, dan tautan sumber resmi.
-- `/faq`: jawaban yang sama dengan asisten terkurasi global, dibuka dari tombol gelembung percakapan pada header. Asisten tidak memakai model AI.
+- `/faq`: jawaban yang sama dengan asisten terkurasi global pada header. FAQ tetap pilihan awal; implementasi AI beta tersedia dengan flag mati dan konfigurasi terpisah ([panduan RAG](docs/ASISTEN-RAG.md)).
 - `/pencarian`: pencarian seluruh kata, tidak membedakan kapital, hanya proyeksi versi terbit.
 - `/simulasi`: konversi lokal tanpa pengiriman input ke server, rincian rumus, validasi, reset, dan tabel baseline.
 - `/tentang`, `/kontak`, `/privasi`: halaman pendukung tetap melalui persetujuan. Kontak mendukung kanal website/email/telepon dan jam layanan opsional dari CMS.
 - `/admin`: dashboard dan modul CMS, revisi, persetujuan, pengguna, aktivitas.
-- `/admin/dokumen`: sumber PDF privat, ekstraksi per halaman dan persetujuan; persetujuan belum mengaktifkan indeks/AI. Panduan dan batas ada di [docs/DOKUMEN-PDF.md](docs/DOKUMEN-PDF.md).
+- `/admin/dokumen`: sumber PDF privat, ekstraksi per halaman dan persetujuan. Persetujuan memicu indeks potongan/embedding privat; jawaban AI belum aktif. Panduan dan batas ada di [docs/DOKUMEN-PDF.md](docs/DOKUMEN-PDF.md).
 - `/api/health`, `sitemap.xml`, `robots.txt`: pemeriksaan layanan dan metadata publik.
 
 Revisi kerja terpisah dari penunjuk publik. Pengajuan mengunci isi; simpan versi basi ditolak. Keputusan, proyeksi pencarian, dan audit disimpan dalam satu transaksi. Media unggahan disimpan di luar `public/`, diperiksa isinya, dibersihkan metadata, dan hanya dapat dibaca publik selama dirujuk revisi terbit.
@@ -94,6 +98,14 @@ npm run test:integration
 npm run build
 ```
 
+Persiapan R4 menyediakan evaluasi kata kunci tanpa API berbayar dari pertanyaan acuan dan revisi PDF yang disetujui:
+
+```bash
+npm run rag:evaluate -- .local/pertanyaan-r4.json .local/laporan-r4-baru
+```
+
+Format, metrik, privasi laporan dan batas penilaian ada di [docs/EVALUASI-RAG.md](docs/EVALUASI-RAG.md). Hentikan dev bila memakai PGlite yang sama. Alat tidak membuat indeks, memigrasikan data atau mengaktifkan AI.
+
 Unit mencakup empat hasil acuan dan 105 kombinasi simulator, input yang tidak sah, sumber, URL/Markdown, sandi, serta gambar. Integrasi memakai PostgreSQL tertanam terisolasi dengan Prisma/driver PostgreSQL yang sama: siklus revisi, bypass peran, konflik versi, transaksi audit, media bersama, akun, rate limit, dan impor idempoten.
 
 [docs/VERIFICATION.md](docs/VERIFICATION.md) mencatat hasil aktual dan batas verifikasi. [docs/DESAIN.md](docs/DESAIN.md) memuat arah visual, atribusi, dan kritik screenshot. Jangan menafsirkan hasil pengembangan sebagai persetujuan substansi atau kesiapan produksi.
@@ -116,7 +128,13 @@ Regresi fokus dialog/menu, skip link, validasi CMS/ganti sandi/akun, gulir keybo
 
 **R2a, 12 November:** modul PDF privat sudah mengelola unggah, ekstraksi/halaman, revisi dan persetujuan sumber. **27 unit, 53 integrasi, dua browser PDF, typecheck, build image dan enam fase pemeriksa native HTTPS lulus.** PDF tetap privat setelah persetujuan; teks tidak dikirim ke AI. Skema menambah enum/tiga tabel melalui migrasi tambahan, dan pengujian memakai fixture terisolasi tanpa memigrasikan database pengembangan pengguna. Batas PDF, prosedur dan pekerjaan indeks tersisa ada di [docs/DOKUMEN-PDF.md](docs/DOKUMEN-PDF.md).
 
-Urutan kerja aktif ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Berikutnya R2b untuk indeks/retrieval; R2 penuh dan AI belum selesai. Buka paket yang sudah lulus kembali bila ada perubahan terkait atau cacat yang dapat direproduksi.
+**R2b, 13 November:** indeks dan retrieval sumber PDF. Potongan per halaman, embedding OpenAI `text-embedding-3-small` sekali per teks unik, serta pencarian kata kunci + pgvector hanya atas sumber disetujui berstatus Berlaku/Diubah. **29 unit, 54 integrasi, dua browser PDF, typecheck dan build terisolasi lulus**; pemeriksa native belum dijalankan karena Docker Desktop tidak aktif. Tanpa `OPENAI_API_KEY`, indeks memakai kata kunci saja dan tidak ada panggilan berbayar. Proses ulang yang tertunda dengan `npm run rag:index` setelah dev dihentikan. Migrasi baru membuat extension `vector`; backup data lokal sebelum `npm run dev` berikutnya.
+
+**R3, 16 November:** endpoint jawaban/kutipan/fallback dan pilihan AI pada panel sudah diimplementasikan lokal dengan **flag mati**. **31 unit, 59 integrasi penuh, empat browser RAG, empat regresi FAQ, typecheck, lint UI, build kedua image dan tujuh fase native HTTPS lulus.** Native ini juga menutup verifikasi R2b/pgvector; container/network/volume uji dibersihkan. Anggaran atomik bulanan mencakup seluruh embedding dan generasi; key saja tidak mengizinkan panggilan berbayar tanpa cap/tarif. Migrasi baru menambah `AiUsageMonth`; backup sebelum dev menerapkannya. Model generatif, cap/tarif, key dan PDF resmi pengguna belum tersedia; kualitas model/API nyata serta R4 belum diuji. Rincian di [docs/ASISTEN-RAG.md](docs/ASISTEN-RAG.md) dan [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+**R4a, 16 November:** alat evaluasi kata kunci, validasi acuan dan laporan privat tersedia. **33 unit, 63 integrasi penuh dan typecheck lulus**; key/anggaran aktif tidak menyebabkan API dipanggil oleh evaluator. Status CLI 0/1/2 dipertahankan saat PGlite membuka/menutup engine, termasuk perbaikan efek `process.exitCode` WASM. Belum ada evaluasi mutu PDF resmi atau generasi; browser/build/native tidak diulang. Panduan di [docs/EVALUASI-RAG.md](docs/EVALUASI-RAG.md).
+
+Urutan kerja aktif ada di [docs/STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md). Berikutnya: PDF resmi dan kasus acuan, keputusan model generatif/biaya/key, peninjauan Privasi serta evaluasi semantik/generasi sebelum beta. AI belum aktif. Buka paket yang sudah lulus kembali bila ada perubahan terkait atau cacat yang dapat direproduksi.
 
 **Rencana AI disetujui 11 November:** RAG dari PDF resmi peraturan JF dikembangkan paralel dengan C2 dan diaktifkan bertahap setelah evaluasi. Pengguna memilih API hosted berbiaya murah; model lokal/Rp0 untuk komponen AI tidak lagi menjadi arah. Sumber, persetujuan, kandidat model dan estimasi biaya ada di [PRD tambahan RAG](docs/PRD-RAG-Jafa-Hub.md). PDF, penyedia/cap final dan API key belum tersedia; panel saat ini tetap asisten FAQ terkurasi.
 
@@ -138,7 +156,7 @@ Hasil 45/45 integrasi dan 46/46 E2E mendahului paket terbaru. Pembaca layar nyat
 
 Paket yang dapat ditinjau tersedia pada [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), serta [template konfigurasi](deploy/runtime.env.example); urutan build/check/migrate/import/bootstrap/start ada di [docs/RUNTIME.md](docs/RUNTIME.md). `npm start` kini memeriksa konfigurasi dan menolak `.env`/`.local` dalam artefak; `npm run dev` tetap jalur pengembangan. Gunakan salinan rilis bersih, jangan menghapus data pengembangan untuk melewati pemeriksaan. Migrasi/impor/bootstrap tidak berjalan otomatis saat server dimulai.
 
-Gunakan PostgreSQL native, HTTPS, dan volume media persisten. Set `JAFA_LOCAL_DATABASE=false`, `JAFA_CONTENT_PREVIEW=false`, `APP_URL` ke domain nyata, serta `AUTH_RATE_LIMIT_KEY` dan `BETTER_AUTH_SECRET` ke nilai acak unik per lingkungan. Tetapkan `MEDIA_DIRECTORY` ke direktori volume di luar artefak build. Petunjuk lengkap ada di [docs/OPERASIONAL.md](docs/OPERASIONAL.md).
+Gunakan PostgreSQL native, HTTPS, dan volume media persisten. Set `JAFA_LOCAL_DATABASE=false`, `JAFA_CONTENT_PREVIEW=false`, `APP_URL` ke domain nyata, serta `AUTH_RATE_LIMIT_KEY` dan `BETTER_AUTH_SECRET` ke nilai acak unik per lingkungan. Tetapkan `MEDIA_DIRECTORY` ke direktori volume di luar artefak build. PostgreSQL memerlukan extension pgvector yang dibuat admin database sebelum migrasi R2b. `OPENAI_API_KEY` opsional dan hanya dipasang setelah batas biaya ditetapkan ([docs/RUNTIME.md](docs/RUNTIME.md)). Petunjuk lengkap ada di [docs/OPERASIONAL.md](docs/OPERASIONAL.md).
 
 Autentikasi memakai **Better Auth 1.7.13** melalui API server login/sesi/logout dan adapter Prisma. Facade aplikasi mempertahankan registrasi tertutup, hash token sesi di database, cookie bertanda tangan, batas sesi absolut delapan jam, dan rate limit persisten untuk API maupun Server Actions. Hash scrypt lama dipindahkan ke `Account.password` tanpa reset, lalu diperkuat saat login berhasil. Seluruh sesi lama dicabut oleh migrasi. Endpoint aplikasi tetap terbatas; seluruh handler Better Auth tidak diekspos. Hasil dan batas pemeriksaan ada di [docs/KEAMANAN.md](docs/KEAMANAN.md).
 

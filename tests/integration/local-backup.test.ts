@@ -50,7 +50,8 @@ test("backup/restore database dan media mempertahankan seluruh ID, nilai, dan re
     await mkdir(join(media, "documents")); await writeFile(join(media, "documents", pdfKey), pdf);
     const document = await client.documentAsset.create({ data: { storageKey: pdfKey, checksum: createHash("sha256").update(pdf).digest("hex"), size: pdf.length, pageCount: 1, needsOcr: false, parserVersion: "synthetic-backup", uploadedBy: editor.id, pages: { create: { number: 1, text: "Teks halaman sintetis", checksum: createHash("sha256").update("Teks halaman sintetis").digest("hex") } } } });
     const knowledge = await client.contentItem.create({ data: { kind: "knowledge", slug: "pdf-backup" } });
-    await client.contentRevision.create({ data: { itemId: knowledge.id, number: 1, reviewedOn: "2026-10-26", payload: { title: "PDF privat sintetis", documentId: document.id }, document: { create: { documentId: document.id } } } });
+    const knowledgeRevision = await client.contentRevision.create({ data: { itemId: knowledge.id, number: 1, reviewedOn: "2026-10-26", payload: { title: "PDF privat sintetis", documentId: document.id }, document: { create: { documentId: document.id } } } });
+    await client.$executeRaw`INSERT INTO "KnowledgeChunk" (id, "revisionId", position, "pageNumber", text, checksum, model, embedding) VALUES (gen_random_uuid(), ${knowledgeRevision.id}::uuid, 0, 1, 'Potongan sintetis', 'synthetic-checksum', 'text-embedding-3-small', ${`[${Array(1536).fill(0.25).join(",")}]`}::vector)`;
     const item = await client.contentItem.create({ data: { kind: "article", slug: "fixture-backup" } });
     const approved = await client.contentRevision.create({ data: {
       itemId: item.id, number: 1, status: "approved", reviewedOn: "2026-10-26", payload: { title: "Materi terbit sintetis", body: "Isi tetap tersimpan." },
@@ -64,8 +65,9 @@ test("backup/restore database dan media mempertahankan seluruh ID, nilai, dan re
     await client.publishedSearchEntry.create({ data: { itemId: item.id, revisionId: approved.id, kind: "article", title: "Materi terbit sintetis", summary: "Ringkasan", text: "Isi tetap tersimpan.", path: "/insight/fixture-backup", professions: ["pp"], publishedAt: new Date("2026-10-26T00:00:00Z") } });
     await client.auditEvent.create({ data: { actorId: approver.id, actorName: approver.name, action: "content.publish", objectId: item.id, revisionId: approved.id, note: "Fixture terisolasi, bukan persetujuan materi pengguna." } });
     await client.rateLimit.create({ data: { key: "synthetic-rate-limit", count: 2, expiresAt: new Date("2026-12-01T00:00:00Z") } });
+    await client.aiUsageMonth.create({ data: { month: "2026-11", costMicrousd: 1250n, inputTokens: 3000n, outputTokens: 500n, embeddingTokens: 100n, requests: 2, failedRequests: 1, unmeteredRequests: 1, durationMs: 250n } });
     expected = await allRows(await local.engine);
-    assert.equal(Object.keys(expected).length, 18);
+    assert.equal(Object.keys(expected).length, 20);
     assert.ok(Object.entries(expected).every(([table, rows]) => table === "Verification" || rows.length > 0));
     await assert.rejects(backupLocal(pg, media, backup), /sedang digunakan/);
     await assert.rejects(readdir(backup), { code: "ENOENT" });

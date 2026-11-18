@@ -126,6 +126,7 @@ model ContentRevision {
   media        RevisionMedia[]
   contributors RevisionContributor[]
   document     RevisionDocument?
+  chunks       KnowledgeChunk[]
   @@unique([itemId, number])
   @@index([status, updatedAt])
 }
@@ -212,6 +213,20 @@ model RevisionDocument {
   @@index([documentId])
 }
 
+model KnowledgeChunk {
+  id         String                        @id @default(uuid()) @db.Uuid
+  revisionId String                        @db.Uuid
+  revision   ContentRevision               @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  position   Int
+  pageNumber Int
+  text       String
+  checksum   String
+  model      String?
+  embedding  Unsupported("vector(1536)")?
+  @@unique([revisionId, position])
+  @@index([checksum])
+}
+
 model PublishedSearchEntry {
   itemId      String      @id @db.Uuid
   item        ContentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -244,4 +259,16 @@ model RateLimit {
   count     Int
   expiresAt DateTime
   @@index([expiresAt])
+}
+
+model AiUsageMonth {
+  month             String @id
+  costMicrousd      BigInt @default(0)
+  inputTokens       BigInt @default(0)
+  outputTokens      BigInt @default(0)
+  embeddingTokens   BigInt @default(0)
+  requests          Int    @default(0)
+  failedRequests    Int    @default(0)
+  unmeteredRequests Int    @default(0)
+  durationMs        BigInt @default(0)
 }

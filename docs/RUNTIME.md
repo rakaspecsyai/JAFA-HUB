@@ -4,18 +4,32 @@ Paket ini menyediakan artefak dan prosedur untuk satu aplikasi Node.js, PostgreS
 
 **C1 dan C2 selesai lokal.** C1 memakai bukti 10 November: 25 unit, typecheck, smoke produksi, build kedua image, migrasi/impor idempoten PostgreSQL native, health dan restart/persistensi lulus. C2 pada 11 November menambahkan login/sesi, tiga peran, publikasi/penarikan serta otorisasi media melalui HTTPS fixture lokal; pemeriksa exit 0 dan cleanup lulus. Staging resmi dan UAT tetap terbuka; rincian hasil di [VERIFICATION.md](VERIFICATION.md).
 
+**R2b/R3, 16 November:** kedua image dan tujuh fase native HTTPS lulus, exit 0; PostgreSQL 17 + pgvector 0.8.7 menerima lima migrasi sebagai role `jafa` non-superuser. Indeks/pencarian/penarikan sumber serta ledger anggaran terbukti dengan key kosong/AI mati. `.local/native-runtime-5hEJIe/result.json` mencatat kelulusan dan cleanup; generasi API nyata serta R4 belum diuji.
+
 ## Isi paket
 
-- `Dockerfile`: target `database` berbasis PostgreSQL 17 dan target `runtime` berbasis Node 22 Bookworm. Runtime berjalan sebagai pengguna `node`. Prisma/tsx tetap tersedia karena migrasi dan perintah akun yang sudah ada memerlukannya.
+- `Dockerfile`: target `database` berbasis PostgreSQL 17 dengan paket pgvector dan target `runtime` berbasis Node 22 Bookworm. Runtime berjalan sebagai pengguna `node`. Prisma/tsx tetap tersedia karena migrasi dan perintah akun yang sudah ada memerlukannya.
 - `compose.yaml`: aplikasi dan database, dua volume bernama (`postgres`/`media`), serta layanan `manage` pada profil maintenance. Aplikasi menunggu health database. Database tidak membuka port host; aplikasi dipublikasikan pada `127.0.0.1:53174` secara default.
 - `.dockerignore`: daftar sumber yang boleh masuk build; `.env`, `.local`, cache/test-results dan data pengembangan tidak ikut. Image runtime juga tidak menyalin direktori tes.
 - `scripts/production.mjs`: pemeriksaan konfigurasi sebelum startup/migrasi/impor/bootstrap/pemulihan. Menolak pratinjau/PGlite, origin selain HTTPS, rahasia pendek/sama, media di dalam artefak atau melalui symlink ke artefak, media tak dapat dibaca/ditulis, serta artefak yang membawa `.env`/`.local`. Nilai konfigurasi tidak dicetak oleh pemeriksa.
-- `deploy/postgres-init.sh`: membuat akun aplikasi `jafa` tanpa superuser/createdb/createrole. Password admin database tidak diberikan ke aplikasi. Inisialisasi ini hanya berlaku pada volume database baru; tidak dijalankan ulang terhadap volume berisi data.
+- `deploy/postgres-init.sh`: membuat akun aplikasi `jafa` tanpa superuser/createdb/createrole dan membuat extension `vector` sebagai superuser. Password admin database tidak diberikan ke aplikasi. Inisialisasi ini hanya berlaku pada volume database baru; tidak dijalankan ulang terhadap volume berisi data.
 - `deploy/runtime.env.example`: template kosong untuk konfigurasi privat Compose.
 
 Build memakai database dummy tanpa rahasia runtime. Startup tidak menjalankan migrasi, impor, atau bootstrap otomatis. `robots.txt` dibentuk saat runtime agar alamat sitemap mengikuti `APP_URL` lingkungan tujuan, bukan origin build.
 
 R2a menambah PDF.js dan `src/lib/pdf-worker.mjs` yang ikut pada image. PDF memakai subdirektori `documents/` pada volume media yang sama; tidak menambah volume atau API key. Terapkan migrasi `202611120001_private_documents` secara manual pada runtime tujuan setelah backup. Worker sumber dan dependency lockfile harus ikut pada artefak host; `.next` saja tidak cukup. Alur/batas di [DOKUMEN-PDF.md](DOKUMEN-PDF.md).
+
+R2b menambah migrasi `202611130001_knowledge_index` yang memerlukan extension `vector`. Volume database baru membuatnya saat inisialisasi. **Volume yang sudah berisi data tidak menjalankan init ulang**: setelah backup dan build image baru, admin database membuat extension sebelum migrasi. Role `jafa` tetap non-superuser; migrasi mengandalkan extension yang sudah dibuat oleh admin.
+
+```bash
+docker compose --env-file /path/privat/runtime.env up -d --wait database
+docker compose --env-file /path/privat/runtime.env exec database psql -U postgres -d jafa -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+docker compose --env-file /path/privat/runtime.env run --rm manage migrate
+```
+
+Host tanpa container memasang pgvector pada PostgreSQL-nya dan menjalankan perintah `CREATE EXTENSION` yang sama sebagai admin. Key opsional; sejak R3 embedding juga memerlukan `JAFA_AI_MONTHLY_USD` dan `JAFA_AI_EMBEDDING_USD_PER_MILLION`. Tanpa konfigurasi itu, potongan dan pencarian kata kunci tetap berjalan sementara embedding menunggu. Persetujuan sumber memicu indeks otomatis. Untuk retry, atau setelah key/anggaran dipasang, jalankan `docker compose --env-file /path/privat/runtime.env run --rm manage index` (tidak memerlukan TTY). Teks yang sudah di-embed tidak dibayar ulang.
+
+Migrasi R3 `202611160001_ai_usage` menambah ledger anggaran bulanan bersama untuk seluruh panggilan AI. Generasi/panel memakai flag `JAFA_RAG_ENABLED=false` secara default, ditambah model dan tarif input/output yang harus ditetapkan pemilik akun. Tidak ada model atau anggaran berbayar default. Backup sebelum migrasi; konfigurasi, privasi dan syarat aktivasi ada di [ASISTEN-RAG.md](ASISTEN-RAG.md).
 
 ## Konfigurasi privat
 
@@ -108,7 +122,9 @@ JAFA_TEST_DOCKER='/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe' \
 
 Proxy HTTPS sementara mempertahankan host/origin dan menimpa header forwarded sebelum meneruskan ke aplikasi produksi pada loopback. Sertifikat lokal hanya dipercaya oleh context browser uji; trust store host tidak berubah. Rahasia Compose serta kunci sertifikat dibuat acak di direktori temporer privat dan dihapus setelah pemeriksaan. Cookie produksi tetap Secure. Ini memeriksa terminasi TLS lokal, bukan konfigurasi proxy/domain/sertifikat staging resmi.
 
-Alur browser memakai login Server Action, unggahan dan sanitasi gambar, simpan/ajukan/terbit/tarik. Request aksi diputar ulang dengan sesi peran yang salah; perubahan peran mencabut sesi editor, dan akun kontributor yang kemudian menjadi penyetuju tetap ditolak saat mencoba menyetujui revisinya. Artikel kedua memakai layanan draf/pengajuan yang sama untuk menyiapkan rujukan gambar bersama, lalu diterbitkan dan ditarik melalui CMS. Draf berikutnya tidak mengganti versi publik; penarikan diperiksa pada detail, daftar, pencarian, sitemap serta akses gambar sampai rujukan terbit terakhir hilang. Logout dan expiry database juga memeriksa penggunaan ulang cookie lama. Sejak R2a, fase keenam memeriksa worker PDF produksi, ekstraksi/halaman, persetujuan/penarikan sumber, dashboard dan file yang tetap privat.
+Alur browser memakai login Server Action, unggahan dan sanitasi gambar, simpan/ajukan/terbit/tarik. Request aksi diputar ulang dengan sesi peran yang salah; perubahan peran mencabut sesi editor, dan akun kontributor yang kemudian menjadi penyetuju tetap ditolak saat mencoba menyetujui revisinya. Artikel kedua memakai layanan draf/pengajuan yang sama untuk menyiapkan rujukan gambar bersama, lalu diterbitkan dan ditarik melalui CMS. Draf berikutnya tidak mengganti versi publik; penarikan diperiksa pada detail, daftar, pencarian, sitemap serta akses gambar sampai rujukan terbit terakhir hilang. Logout dan expiry database juga memeriksa penggunaan ulang cookie lama. Sejak R2a, fase keenam memeriksa worker PDF produksi, ekstraksi/halaman, persetujuan/penarikan sumber, dashboard dan file yang tetap privat. Sejak R2b, fase itu juga memeriksa migrasi pgvector oleh role `jafa`, potongan otomatis setelah persetujuan, pencarian kata kunci/vektor dan hasil kosong setelah penarikan. Override Compose sementara mengunci `OPENAI_API_KEY` kosong, sehingga key di shell atau Windows tidak pernah dipakai.
+
+R3 menambah fase ketujuh: endpoint AI mati tanpa konfigurasi, origin asing ditolak, serta reservasi/pencatatan anggaran sebagai role non-superuser tanpa API berbayar. Override juga mengunci flag RAG mati.
 
 Hasil per fase dan cleanup tersimpan pada `.local/native-runtime-*/result.json`; `commands.log` dan trace kegagalan tetap privat karena dapat memuat kredensial/sesi sintetis. Pemeriksa menghentikan dan menghapus hanya container/network/volume project acak miliknya saat selesai atau gagal; image/cache build dipertahankan. Penghentian paksa proses/engine dapat menyisakan resource uji: periksa nama project pada hasil sebelum membersihkannya, jangan memakai prune global. Hasil lulus hanya dicatat setelah perintah benar-benar selesai; suite E2E PGlite, aksesibilitas, beban, backup/restore, UAT dan gerbang rilis tetap mempunyai bukti tersendiri.
 

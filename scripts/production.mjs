@@ -42,10 +42,11 @@ async function main() {
     start: ["node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0"],
     migrate: ["node_modules/prisma/build/index.js", "migrate", "deploy"],
     import: ["--import", "tsx", "scripts/import-content.ts"],
+    index: ["--import", "tsx", "scripts/index-knowledge.ts"],
     bootstrap: ["--import", "tsx", "scripts/bootstrap-admin.ts"],
     recover: ["--import", "tsx", "scripts/recover-admin.ts"]
   };
-  if (command !== "check" && !Object.hasOwn(commands, command)) throw new Error("Gunakan check, start, migrate, import, bootstrap, atau recover.");
+  if (command !== "check" && !Object.hasOwn(commands, command)) throw new Error("Gunakan check, start, migrate, import, index, bootstrap, atau recover.");
   process.env.NODE_ENV = "production";
   const errors = validateProductionEnvironment(process.env, process.cwd());
   if (errors.length) throw new Error(errors.join(" "));
