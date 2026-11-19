@@ -1,13 +1,13 @@
 # Serah-terima aktif Jafa Hub
 
-Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose pada data sintetis. Bundle dipasang baca saja, diimpor lewat `manage`, dan diverifikasi lewat aplikasi sebelum dan sesudah container dibuat ulang. Database pengguna dan `.env` tetap utuh.
+Diperbarui **19 November 2026** untuk staging Vercel dan Supabase. Latihan Compose 18 November tetap menjadi bukti transfer dengan data sintetis.
 
 ## Mulai di sini
 
 1. Baca `AGENTS.md`, dokumen ini dan `README.md`, lalu periksa `git status` serta kode yang terkait. Catatan ini bukan pengganti pemeriksaan kode.
 2. [STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md) memetakan kemampuan/paket; [JALUR-DEPLOY.md](docs/JALUR-DEPLOY.md) memetakan pekerjaan sampai cloud. Baca bagian relevan dalam `PRD-Jafa-Hub.md` sebelum mengubah produk.
 3. Paket lulus dibuka kembali hanya karena perubahan terkait, cacat yang dapat direproduksi atau kebutuhan baru; jangan kembali mengulang aksesibilitas/screenshot tanpa batas.
-4. Perubahan masih **belum di-commit**, termasuk sumber dan migrasi baru yang belum dilacak Git. Pertahankan seluruh working tree; jangan reset/clean untuk menyamakan dengan HEAD. Clone dari commit lama belum mewakili keadaan ini.
+4. Sumber dan migrasi transfer sebelumnya sudah ada di `origin/main`. Push perubahan TLS dari branch `staging` sebelum menguji Preview. Periksa `git status` untuk mengetahui keadaan terbaru.
 
 ## Keadaan produk sekarang
 
@@ -31,7 +31,7 @@ Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose 
 - Pengguna memilih API hosted berbiaya murah, bukan model lokal. Keputusan Rp0 sebelumnya tidak berlaku lagi untuk AI; anggaran infrastruktur tidak otomatis berubah.
 - Embedding **`text-embedding-3-small`**, 1.536 dimensi, dipilih 13 November dan dikonfirmasi 16 November. Ini belum memilih model pembuat jawaban. Model generatif, plafon/tarif, akses akun dan privasi provider belum disepakati. Rekomendasi model/harga pada PRD RAG adalah proposal historis, bukan persetujuan biaya; periksa harga/akses saat akan dipakai.
 - `JAFA_RAG_ENABLED=false` adalah default. Key + anggaran/tarif embedding dapat memicu indeks berbayar meski panel AI mati. Untuk rilis inti tanpa biaya AI, pastikan **key kosong pada konfigurasi efektif**, selain flag mati.
-- Hosting, domain, lokasi data, anggaran cloud dan petugas belum ditetapkan dalam catatan proyek. Tidak ada deployment staging/produksi yang terbukti di repo.
+- Pengguna memilih Vercel dan Supabase untuk staging sementara dan akan melakukan deploy sendiri. Pengguna mengonfirmasi akun admin staging sudah dibuat dan Preview `staging` berstatus Ready. Koneksi runtime dan login pada Preview masih perlu diuji. Domain produksi, anggaran dan petugas masih terbuka.
 
 ## Konfigurasi dan data lokal
 
@@ -45,6 +45,7 @@ Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose 
 
 ## Bukti verifikasi dan batas
 
+- **TLS Preview, 19 November:** lima migrasi Supabase staging dilaporkan mutakhir oleh `prisma migrate status`. Runtime membaca `DATABASE_CA_CERT` dan menolak parameter TLS URL yang berpotensi menimpa CA. Kueri PostgreSQL native memakai TLS dengan CA fixture yang benar dan gagal dengan CA yang salah. Build pertama dihentikan pemeriksaan keamanan Next.js. Setelah perbaikan ke `16.4.6`, build terisolasi, typecheck dan 34 tes unit lulus. `npm audit --omit=dev` melaporkan 0 temuan saat diperiksa. Belum ada uji koneksi TLS dari Vercel. [Konfigurasi database](docs/OPERASIONAL.md#postgresql-dan-konfigurasi-produksi)
 - **C3 Compose, 18 November:** typecheck, 4/4 integrasi transfer, uji native, build kedua image dan uji Compose lulus. Aplikasi membaca artikel terbit dan hasil pencarian, menyajikan gambar utuh serta membatasi PDF privat menurut peran setelah login ulang, termasuk setelah pembuatan ulang container dengan volume yang sama. Bukti `.local/transfer-compose-WqsxvE/result.json`. Batas HTTP loopback dan konfigurasi yang dipakai dicatat di [VERIFICATION.md](docs/VERIFICATION.md).
 - **C3 transfer data, 17 November:** 33/33 unit, 68/68 integrasi penuh, regresi status SQL dan typecheck lulus. Ekspor/impor native oleh role non-superuser mempertahankan 16 tabel/media/PDF/vector, mengecualikan sesi dan menolak impor ulang; seluruh nilai tetap setelah restart. `.local/transfer-native-yfkrET/result.json` mencatat `passed=true` dan cleanup container/volume/fixture. Log tambahan `.local/data-transfer-20261117-VdC43G/`. Sandbox gagal menangkap stdout beberapa tes CLI lama; pengulangan lengkap di luar sandbox lulus. Error SQL WASM yang mengubah status proses menjadi 100 kini dipulihkan di adapter tanpa menelan penolakan SQL. Tidak ada perubahan skema/dependensi, data pengguna, UI atau API berbayar.
 - **R4a, 16 November:** 33/33 unit, 63/63 integrasi penuh, 13/13 lifecycle/CLI dan typecheck lulus. Guard database belum ada kemudian lulus 2/2 CLI final + typecheck. Bukti `.local/rag-r4a-BV3jg0/result.json` dan log di direktori yang sama.

@@ -13,6 +13,7 @@ Gunakan variabel lingkungan produksi terpisah dari `.env` pengembangan:
 | Variabel | Penerapan |
 | --- | --- |
 | `DATABASE_URL` | URL PostgreSQL dengan kredensial khusus; tidak dimasukkan ke repository/log |
+| `DATABASE_CA_CERT` | Isi PEM CA PostgreSQL untuk koneksi dengan verifikasi sertifikat dan hostname. Jika digunakan, hapus parameter SSL dari `DATABASE_URL`. |
 | `APP_URL` | Origin HTTPS resmi; menjadi dasar canonical, sitemap, dan pemeriksaan origin |
 | `JAFA_LOCAL_DATABASE` | `false` |
 | `JAFA_CONTENT_PREVIEW` | `false` |
@@ -27,6 +28,8 @@ Gunakan variabel lingkungan produksi terpisah dari `.env` pengembangan:
 | `OPENAI_RAG_MODEL` / `JAFA_RAG_ENABLED` | Model pilihan dan flag beta; default mati sampai korpus/evaluasi/privasi siap. Rincian di [ASISTEN-RAG.md](ASISTEN-RAG.md) |
 
 Masing-masing rahasia dapat dibuat dengan `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` pada terminal privat. Jangan memakai satu nilai untuk keduanya atau menyalin hasil ke issue/chat/log operasional. Pertahankan `BETTER_AUTH_SECRET` saat restart agar cookie yang masih sah tetap terbaca; rotasi direncanakan bersama pencabutan sesi.
+
+Pada Supabase, unduh CA dari **Database → Settings → SSL Configuration**. Tempel isi lengkap sertifikat sebagai `DATABASE_CA_CERT` di environment server. Untuk Vercel Preview, gunakan Transaction pooler `6543` dan role aplikasi dalam `DATABASE_URL`. Migrasi Prisma tetap memakai koneksi Session pooler dari terminal. `DATABASE_CA_CERT` dibaca runtime aplikasi, jadi pengaturan TLS CLI migrasi tetap mengikuti parameter koneksinya sendiri. [SSL Supabase](https://supabase.com/docs/guides/platform/ssl-enforcement)
 
 Tanpa header IP tepercaya, pembatasan memakai satu bucket jaringan konservatif. Setelah proxy dikonfigurasi, pastikan pengunjung tidak dapat memalsukan IP lewat header langsung. Proxy harus membuang header IP kiriman pengunjung dan menetapkan nilai yang benar. Log proxy tidak boleh menyimpan body pertanyaan asisten, query pencarian, sandi, atau cookie sesi.
 

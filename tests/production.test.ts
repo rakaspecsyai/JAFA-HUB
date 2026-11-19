@@ -34,6 +34,20 @@ test("konfigurasi produksi menerima PostgreSQL/origin HTTPS dan menolak fallback
   assert.deepEqual(validateProductionEnvironment({ ...valid, MEDIA_DIRECTORY: "/app-media" }, "/app"), []);
 });
 
+test("CA dari environment menolak parameter TLS URL yang dapat menimpa verifikasi", async () => {
+  const run = promisify(execFile);
+  await assert.rejects(run(process.execPath, ["--import", "tsx", "--input-type=module", "-e", 'import "./src/lib/db.ts"'], {
+    env: { ...process.env, ...valid, DATABASE_URL: `${valid.DATABASE_URL}?sslmode=disable`, DATABASE_CA_CERT: "fixture-ca" },
+    timeout: 10000
+  }), error => {
+    const result = error as { code: number; stderr: string };
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /Hapus parameter SSL dari DATABASE_URL/);
+    assert.doesNotMatch(result.stderr, /PRIVATE_DATABASE_PASSWORD/);
+    return true;
+  });
+});
+
 test("CLI runtime memeriksa konfigurasi tanpa database dan menolak perintah akun noninteraktif", async t => {
   const directory = await mkdtemp(join(tmpdir(), "jafa-runtime-cli-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
