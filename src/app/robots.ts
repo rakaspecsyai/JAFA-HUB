@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 export const dynamic = "force-dynamic";
 export default function robots(): MetadataRoute.Robots {
-  return { rules: { userAgent: "*", allow: "/", disallow: ["/admin", "/api/", "/pencarian"] }, sitemap: `${process.env.APP_URL ?? "http://localhost:3000"}/sitemap.xml` };
+  const base = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  return { rules: { userAgent: "*", allow: "/", disallow: ["/admin", "/api/", "/pencarian"] }, sitemap: `${base}/sitemap.xml` };
 }

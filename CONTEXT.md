@@ -1,6 +1,6 @@
 # Serah-terima aktif Jafa Hub
 
-Diperbarui **19 November 2026** untuk staging Vercel dan Supabase. Latihan Compose 18 November tetap menjadi bukti transfer dengan data sintetis.
+Diperbarui **20 November 2026** untuk validasi staging Vercel dan Supabase. Latihan Compose 18 November tetap menjadi bukti transfer dengan data sintetis.
 
 ## Mulai di sini
 
@@ -14,6 +14,7 @@ Diperbarui **19 November 2026** untuk staging Vercel dan Supabase. Latihan Compo
 | Bagian | Keadaan yang ditemukan |
 | --- | --- |
 | Portal/CMS | Next.js App Router, React, TypeScript, CSS Modules, Prisma/PostgreSQL dan Better Auth. Portal, simulator, akun/peran, revisi/persetujuan, pencarian dan media sudah diimplementasikan lokal |
+| Staging Vercel/Supabase | Preview `staging` Ready. 20 November: health/database, halaman publik, pratinjau mati, AI mati, dan guard auth terbukti; login, alur CMS, dan unggahan media/PDF belum diverifikasi |
 | A/B | Filter revisi terbaru, kanal Kontak dan pemulihan sesi/konflik CMS mempunyai bukti; rincian historis di VERIFICATION.md |
 | C1/C2 | Docker/Compose, pemeriksa konfigurasi produksi dan alur native HTTPS tersedia; ini bukan deployment cloud |
 | C3 | Transfer logis PGlite → PostgreSQL dengan checksum media/PDF, verifikasi skema/tujuan baru, rollback dan sesi baru. CLI host serta alur Compose dengan volume persisten teruji pada data sintetis |
@@ -31,7 +32,7 @@ Diperbarui **19 November 2026** untuk staging Vercel dan Supabase. Latihan Compo
 - Pengguna memilih API hosted berbiaya murah, bukan model lokal. Keputusan Rp0 sebelumnya tidak berlaku lagi untuk AI; anggaran infrastruktur tidak otomatis berubah.
 - Embedding **`text-embedding-3-small`**, 1.536 dimensi, dipilih 13 November dan dikonfirmasi 16 November. Ini belum memilih model pembuat jawaban. Model generatif, plafon/tarif, akses akun dan privasi provider belum disepakati. Rekomendasi model/harga pada PRD RAG adalah proposal historis, bukan persetujuan biaya; periksa harga/akses saat akan dipakai.
 - `JAFA_RAG_ENABLED=false` adalah default. Key + anggaran/tarif embedding dapat memicu indeks berbayar meski panel AI mati. Untuk rilis inti tanpa biaya AI, pastikan **key kosong pada konfigurasi efektif**, selain flag mati.
-- Pengguna memilih Vercel dan Supabase untuk staging sementara dan akan melakukan deploy sendiri. Pengguna mengonfirmasi akun admin staging sudah dibuat dan Preview `staging` berstatus Ready. Koneksi runtime dan login pada Preview masih perlu diuji. Domain produksi, anggaran dan petugas masih terbuka.
+- Pengguna memilih Vercel dan Supabase untuk staging sementara dan akan melakukan deploy sendiri. Pengguna mengonfirmasi akun admin staging sudah dibuat dan Preview `staging` berstatus Ready. Koneksi runtime (health `SELECT 1`) terbukti 20 November; login dan alur CMS/media masih perlu diuji. `MEDIA_DIRECTORY` belum diset di Vercel, sehingga unggahan media berpotensi gagal pada filesystem read-only; jangan pakai `/tmp` sebagai solusi produksi. Domain produksi, anggaran dan petugas masih terbuka.
 
 ## Konfigurasi dan data lokal
 
@@ -45,7 +46,8 @@ Diperbarui **19 November 2026** untuk staging Vercel dan Supabase. Latihan Compo
 
 ## Bukti verifikasi dan batas
 
-- **TLS Preview, 19 November:** lima migrasi Supabase staging dilaporkan mutakhir oleh `prisma migrate status`. Runtime membaca `DATABASE_CA_CERT` dan menolak parameter TLS URL yang berpotensi menimpa CA. Kueri PostgreSQL native memakai TLS dengan CA fixture yang benar dan gagal dengan CA yang salah. Build pertama dihentikan pemeriksaan keamanan Next.js. Setelah perbaikan ke `16.4.6`, build terisolasi, typecheck dan 34 tes unit lulus. `npm audit --omit=dev` melaporkan 0 temuan saat diperiksa. Belum ada uji koneksi TLS dari Vercel. [Konfigurasi database](docs/OPERASIONAL.md#postgresql-dan-konfigurasi-produksi)
+- **TLS Preview, 19 November:** lima migrasi Supabase staging dilaporkan mutakhir oleh `prisma migrate status`. Runtime membaca `DATABASE_CA_CERT` dan menolak parameter TLS URL yang berpotensi menimpa CA. Kueri PostgreSQL native memakai TLS dengan CA fixture yang benar dan gagal dengan CA yang salah. Build pertama dihentikan pemeriksaan keamanan Next.js. Setelah perbaikan ke `16.4.6`, build terisolasi, typecheck dan 34 tes unit lulus. `npm audit --omit=dev` melaporkan 0 temuan saat diperiksa. [Konfigurasi database](docs/OPERASIONAL.md#postgresql-dan-konfigurasi-produksi)
+- **Validasi staging publik, 20 November:** Preview `staging` Vercel + Supabase: `/api/health` 200 (`SELECT 1`), halaman publik 200, pratinjau prototipe dan AI mati, `/admin` 307 ke login, `/api/documents` 401, `/api/rag` `enabled=false`. Ini membuktikan koneksi runtime Supabase dengan verifikasi CA dari Vercel. `APP_URL` berakhiran `/` menghasilkan `//` pada sitemap/robots; diperbaiki dengan normalisasi trailing slash pada `src/app/sitemap.ts` dan `src/app/robots.ts` (typecheck lulus). Login, alur CMS, dan unggahan media/PDF belum diverifikasi. `MEDIA_DIRECTORY` tidak diset di Vercel sehingga unggahan media berpotensi gagal (filesystem read-only); verifikasi dengan akun editor masih terbuka.
 - **C3 Compose, 18 November:** typecheck, 4/4 integrasi transfer, uji native, build kedua image dan uji Compose lulus. Aplikasi membaca artikel terbit dan hasil pencarian, menyajikan gambar utuh serta membatasi PDF privat menurut peran setelah login ulang, termasuk setelah pembuatan ulang container dengan volume yang sama. Bukti `.local/transfer-compose-WqsxvE/result.json`. Batas HTTP loopback dan konfigurasi yang dipakai dicatat di [VERIFICATION.md](docs/VERIFICATION.md).
 - **C3 transfer data, 17 November:** 33/33 unit, 68/68 integrasi penuh, regresi status SQL dan typecheck lulus. Ekspor/impor native oleh role non-superuser mempertahankan 16 tabel/media/PDF/vector, mengecualikan sesi dan menolak impor ulang; seluruh nilai tetap setelah restart. `.local/transfer-native-yfkrET/result.json` mencatat `passed=true` dan cleanup container/volume/fixture. Log tambahan `.local/data-transfer-20261117-VdC43G/`. Sandbox gagal menangkap stdout beberapa tes CLI lama; pengulangan lengkap di luar sandbox lulus. Error SQL WASM yang mengubah status proses menjadi 100 kini dipulihkan di adapter tanpa menelan penolakan SQL. Tidak ada perubahan skema/dependensi, data pengguna, UI atau API berbayar.
 - **R4a, 16 November:** 33/33 unit, 63/63 integrasi penuh, 13/13 lifecycle/CLI dan typecheck lulus. Guard database belum ada kemudian lulus 2/2 CLI final + typecheck. Bukti `.local/rag-r4a-BV3jg0/result.json` dan log di direktori yang sama.
@@ -58,7 +60,7 @@ Diperbarui **19 November 2026** untuk staging Vercel dan Supabase. Latihan Compo
 
 ## Pekerjaan berikutnya
 
-**Portal/cloud:** tetapkan target/budget/domain/PIC dan rencana data → versi sumber yang bisa direproduksi → staging privat dengan PostgreSQL native/media persisten/HTTPS → pemeriksaan alur nyata, keamanan, beban dan restore → UAT/persetujuan substansi → produksi dan pemantauan. Detail/kriteria selesai di [JALUR-DEPLOY.md](docs/JALUR-DEPLOY.md), [RUNTIME.md](docs/RUNTIME.md) dan [KESIAPAN-RILIS.md](docs/KESIAPAN-RILIS.md).
+**Portal/cloud:** staging Vercel/Supabase sudah menyajikan halaman publik dengan database Supabase. Berikutnya: buat akun editor/penyetuju lewat CMS (`/admin/pengguna`), verifikasi login/alur simpan-ajukan-terbit-tarik, unggahan gambar/PDF dan persistensinya, lalu gerbang berikut (target/budget/domain/PIC, rencana data, keamanan, beban, restore, UAT/persetujuan substansi, produksi dan pemantauan). Detail/kriteria selesai di [JALUR-DEPLOY.md](docs/JALUR-DEPLOY.md), [RUNTIME.md](docs/RUNTIME.md) dan [KESIAPAN-RILIS.md](docs/KESIAPAN-RILIS.md).
 
 **RAG:** PDF resmi dan metadata → editor/penyetuju memeriksa sumber → pertanyaan/halaman acuan + R4a → keputusan model, cap/tarif, data provider dan key privat → evaluasi semantik/generasi privat → peninjauan mutu/Privasi → beta. R4a tidak menjalankan bagian semantik/generasi. Jangan menaruh key pada chat/Git.
 

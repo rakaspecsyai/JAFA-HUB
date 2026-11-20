@@ -27,6 +27,31 @@ Pembukaan database persisten kini dilindungi kunci antarproses; launcher menutup
 
 Persiapan pemindahan data ke PostgreSQL native tersedia melalui `npm run db:transfer -- export <bundle-baru>` dan `npm run db:transfer -- import <bundle> <media-baru>`. Alat mempertahankan akun, revisi, audit, media, dan PDF. Pengelola login ulang setelah transfer. Prosedur host dan Compose sudah diuji dengan data sintetis pada database tujuan baru yang sudah dimigrasikan. [Panduan pemindahan data](docs/PEMINDAHAN-DATA.md)
 
+## Deployment Vercel + Supabase
+
+Staging dan produksi dapat dibangun dari branch yang sudah di-commit. Vercel menjalankan aplikasi Next.js, Supabase menyediakan PostgreSQL; artifact Docker/Compose tetap tersedia untuk self-host ([RUNTIME.md](docs/RUNTIME.md)).
+
+| Variabel | Nilai |
+| --- | --- |
+| `APP_URL` | Origin HTTPS tanpa garis miring akhir, misalnya `https://staging.domain` |
+| `DATABASE_URL` | Runtime memakai Transaction pooler Supabase (`:6543`); migrasi memakai Session pooler (`:5432`) dari terminal |
+| `DATABASE_CA_CERT` | Isi lengkap CA Supabase; hapus parameter SSL dari `DATABASE_URL` |
+| `BETTER_AUTH_SECRET`, `AUTH_RATE_LIMIT_KEY` | Dua nilai acak 32 byte berbeda per lingkungan |
+| `JAFA_LOCAL_DATABASE` | `false` |
+| `JAFA_CONTENT_PREVIEW` | `false` |
+| `JAFA_RAG_ENABLED` | `false` sampai evaluasi AI selesai; `OPENAI_API_KEY` kosong untuk rilis tanpa biaya AI |
+| `MEDIA_DIRECTORY` | Hanya untuk self-host/Docker (volume persisten). Di Vercel filesystem read-only; lihat catatan di bawah |
+
+Urutan:
+
+1. Buat database Supabase dan terapkan migrasi dengan Session pooler dari terminal: `npm run db:migrate` (environment privat).
+2. Pastikan extension `vector` tersedia sebelum migrasi `202611130001_knowledge_index` (dibuat admin database).
+3. Atur environment Vercel sesuai tabel; build otomatis dari commit.
+4. Buat admin pertama (lihat [Menyiapkan akun pengelola (cloud)](#menyiapkan-akun-pengelola-cloud)), lalu buat editor/penyetuju di `/admin/pengguna`.
+5. Impor materi awal sebagai draf (opsional) dan terbitkan hanya setelah peninjauan.
+
+**Catatan media:** unggahan gambar/PDF memerlukan penyimpanan persisten. `MEDIA_DIRECTORY` belum diset di Vercel dan filesystem platform read-only, sehingga unggahan belum dapat dipakai di sana; verifikasi dengan akun editor masih terbuka. Setelah akun editor dibuat dan sandi sementara diganti, jalankan `npm run staging:verify` dengan `STAGING_URL`, `STAGING_EDITOR_EMAIL`, dan `STAGING_EDITOR_PASSWORD` untuk memeriksa login, unggahan gambar, dan akses publik/privat. Jangan menjadikan `/tmp` sebagai solusi produksi.
+
 ## Pratinjau dan publikasi
 
 `.env.example` memakai `JAFA_CONTENT_PREVIEW=false`. Ubah ke `true` hanya untuk memperlihatkan materi prototipe tanpa menerbitkan draf. Banner menandai pratinjau ini. Profil, artikel, FAQ, pencarian, dan asisten menggunakan data pratinjau ketika mode tersebut aktif; perubahan CMS tidak mengganti data pratinjau.
@@ -39,17 +64,20 @@ JAFA_CONTENT_PREVIEW="false"
 
 Mulai ulang dev. Konten hanya muncul setelah editor mengajukan dan penyetuju menerbitkannya. Dalam produksi, pratinjau selalu mati sekalipun variabel tersebut salah diaktifkan. Gangguan database ditampilkan sebagai gangguan layanan, bukan daftar kosong.
 
-## Membuat admin pertama
+## Menyiapkan akun pengelola (cloud)
 
-Jalankan setelah persiapan lokal selesai dan dev dihentikan:
+Akun pengelola dibuat pada environment cloud (Supabase + Vercel), bukan pada database pengembangan lokal. Pastikan migrasi sudah diterapkan pada database tujuan (lihat [OPERASIONAL.md](docs/OPERASIONAL.md#postgresql-dan-konfigurasi-produksi)).
+
+**Admin pertama** dibuat sekali dari terminal privat dengan environment cloud disuntikkan. Jangan memakai `.env` lokal:
 
 ```bash
-npm run admin:bootstrap -- --email "<email-petugas>" --name "<nama-petugas>"
+node --env-file=<berkas-privat> --import tsx scripts/bootstrap-admin.ts \
+  --email "<email-petugas>" --name "<nama-petugas>"
 ```
 
-Sandi sementara acak ditampilkan sekali di terminal; tidak ada akun bawaan. Simpan melalui kanal internal, jalankan dev kembali, lalu buka **/admin/login** dan ganti sandi awal. Bootstrap menolak membuat admin tambahan ketika admin aktif sudah ada.
+Sandi sementara acak ditampilkan sekali di terminal; tidak ada akun bawaan. Serahkan melalui kanal internal, lalu buka **/admin/login** dan ganti sandi awal. Bootstrap menolak membuat admin tambahan ketika admin aktif sudah ada. Untuk lingkungan Docker/self-host, `npm run runtime -- bootstrap` memakai artifact bersih dengan environment host.
 
-Admin membuat akun editor dan penyetuju pada **/admin/pengguna**. Peran tidak saling merangkap:
+**Editor dan penyetuju** dibuat oleh admin melalui **/admin/pengguna** setelah masuk. Peran tidak saling merangkap:
 
 | Peran | Pekerjaan |
 | --- | --- |
@@ -59,7 +87,7 @@ Admin membuat akun editor dan penyetuju pada **/admin/pengguna**. Peran tidak sa
 
 Admin akun tidak dapat menyunting atau menerbitkan konten. Semua kontributor revisi—pembuat, penyunting, dan pengaju—dilarang menerbitkan atau mengembalikan revisi itu, termasuk setelah perubahan peran. Sesi dicabut saat sandi, peran, atau akses diubah. Admin aktif terakhir dilindungi.
 
-Jika semua admin kehilangan akses, petugas teknis memakai `npm run admin:recover -- --email "<email-admin>" --operator "<petugas-teknis>" --reason "<alasan-pemulihan>"` dari terminal privat interaktif setelah dev dihentikan. CLI hanya memulihkan admin aktif, mencabut sesi, mewajibkan ganti sandi, dan mencatat operator/alasan. Prosedur lengkap ada di [docs/OPERASIONAL.md](docs/OPERASIONAL.md#akun-dan-pemulihan-akses).
+Jika semua admin kehilangan akses, petugas teknis memakai `npm run admin:recover -- --email "<email-admin>" --operator "<petugas-teknis>" --reason "<alasan-pemulihan>"` dari terminal privat interaktif pada environment lokal. Pada environment cloud, gunakan `npm run runtime -- recover` dengan environment host pada artifact bersih. CLI hanya memulihkan admin aktif, mencabut sesi, mewajibkan ganti sandi, dan mencatat operator/alasan. Prosedur lengkap ada di [docs/OPERASIONAL.md](docs/OPERASIONAL.md#akun-dan-pemulihan-akses).
 
 ## Halaman dan kemampuan
 
@@ -154,7 +182,7 @@ Hasil 45/45 integrasi dan 46/46 E2E mendahului paket terbaru. Pembaca layar nyat
 
 ## Produksi dan perbedaan dari default PRD
 
-Paket yang dapat ditinjau tersedia pada [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), serta [template konfigurasi](deploy/runtime.env.example); urutan build/check/migrate/import/bootstrap/start ada di [docs/RUNTIME.md](docs/RUNTIME.md). `npm start` kini memeriksa konfigurasi dan menolak `.env`/`.local` dalam artefak; `npm run dev` tetap jalur pengembangan. Gunakan salinan rilis bersih, jangan menghapus data pengembangan untuk melewati pemeriksaan. Migrasi/impor/bootstrap tidak berjalan otomatis saat server dimulai.
+Paket yang dapat ditinjau tersedia pada [Dockerfile](Dockerfile), [compose.yaml](compose.yaml), serta [template konfigurasi](deploy/runtime.env.example); urutan build/check/migrate/import/bootstrap/start ada di [docs/RUNTIME.md](docs/RUNTIME.md). `npm start` kini memeriksa konfigurasi dan menolak `.env`/`.local` dalam artefak; `npm run dev` tetap jalur pengembangan. Gunakan salinan rilis bersih, jangan menghapus data pengembangan untuk melewati pemeriksaan. Migrasi/impor/bootstrap tidak berjalan otomatis saat server dimulai. Pada Vercel build memakai Next.js bawaan platform, sehingga pemeriksa `npm start` tidak dijalankan; lihat [Deployment Vercel + Supabase](#deployment-vercel--supabase).
 
 Gunakan PostgreSQL native, HTTPS, dan volume media persisten. Set `JAFA_LOCAL_DATABASE=false`, `JAFA_CONTENT_PREVIEW=false`, `APP_URL` ke domain nyata, serta `AUTH_RATE_LIMIT_KEY` dan `BETTER_AUTH_SECRET` ke nilai acak unik per lingkungan. Tetapkan `MEDIA_DIRECTORY` ke direktori volume di luar artefak build. PostgreSQL memerlukan extension pgvector yang dibuat admin database sebelum migrasi R2b. `OPENAI_API_KEY` opsional dan hanya dipasang setelah batas biaya ditetapkan ([docs/RUNTIME.md](docs/RUNTIME.md)). Petunjuk lengkap ada di [docs/OPERASIONAL.md](docs/OPERASIONAL.md).
 

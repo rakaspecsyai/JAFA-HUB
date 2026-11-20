@@ -1,5 +1,15 @@
 # Verifikasi implementasi
 
+## Validasi staging Vercel + Supabase — 20 November 2026
+
+Pemeriksaan publik pada Preview `staging` (HTTPS Vercel, PostgreSQL Supabase) tanpa kredensial:
+
+- `/api/health` 200 `{"status":"ok"}` (SELECT 1) dan halaman publik 200; ini membuktikan koneksi runtime Supabase dengan `DATABASE_CA_CERT` dari Vercel.
+- `JAFA_CONTENT_PREVIEW=false` (tidak ada konten prototipe) dan `/api/rag` `{"enabled":false}` dengan fallback `reason:"disabled"`.
+- `/admin` 307 ke `/admin/login`; `/api/documents` 401; `/api/faq/match` fallback; `/api/media` 405.
+- `APP_URL` berakhiran `/` menghasilkan `//` pada sitemap/robots; diperbaiki di `src/app/sitemap.ts` dan `src/app/robots.ts`. Typecheck, 34 tes unit, dan tes sitemap integrasi lulus.
+- Belum diverifikasi: login dengan akun nyata, alur CMS, unggahan gambar/PDF, dan persistensi `MEDIA_DIRECTORY` (tidak diset di Vercel). Skrip `npm run staging:verify` disiapkan.
+
 ## Transfer melalui Docker Compose — 18 November 2026
 
 `tests/operational/transfer-compose.check.ts` menguji langkah operator pada dua project Compose terisolasi dengan data sintetis. Kedua kali build image aplikasi dan PostgreSQL/pgvector berhasil. Layanan `manage` menerapkan lima migrasi, memasang bundle baca saja, lalu mengimpor 26 baris dan 2 berkas ke database baru dan subdirektori volume media bersama. `manage check` dan health aplikasi lulus dengan override `MEDIA_DIRECTORY`.

@@ -26,6 +26,7 @@
     "rag:evaluate": "node --env-file-if-exists=.env --import tsx scripts/evaluate-rag.ts",
     "admin:bootstrap": "node --env-file=.env --import tsx scripts/bootstrap-admin.ts",
     "admin:recover": "node --env-file=.env --import tsx scripts/recover-admin.ts",
+    "staging:verify": "node --import tsx scripts/verify-staging.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
