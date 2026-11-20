@@ -1,13 +1,26 @@
 # Serah-terima aktif Jafa Hub
 
-Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose pada data sintetis. Bundle dipasang baca saja, diimpor lewat `manage`, dan diverifikasi lewat aplikasi sebelum dan sesudah container dibuat ulang. Database pengguna dan `.env` tetap utuh.
+Diperbarui **20 November 2026** setelah penyiapan Preview Vercel dan database Supabase staging. Build Preview serta proteksi akses sudah terverifikasi. Pemeriksaan `/api/health` dan login CMS dari browser yang sudah masuk ke Vercel masih perlu dikonfirmasi.
 
 ## Mulai di sini
 
 1. Baca `AGENTS.md`, dokumen ini dan `README.md`, lalu periksa `git status` serta kode yang terkait. Catatan ini bukan pengganti pemeriksaan kode.
 2. [STATUS-PENGEMBANGAN.md](docs/STATUS-PENGEMBANGAN.md) memetakan kemampuan/paket; [JALUR-DEPLOY.md](docs/JALUR-DEPLOY.md) memetakan pekerjaan sampai cloud. Baca bagian relevan dalam `PRD-Jafa-Hub.md` sebelum mengubah produk.
 3. Paket lulus dibuka kembali hanya karena perubahan terkait, cacat yang dapat direproduksi atau kebutuhan baru; jangan kembali mengulang aksesibilitas/screenshot tanpa batas.
-4. Perubahan masih **belum di-commit**, termasuk sumber dan migrasi baru yang belum dilacak Git. Pertahankan seluruh working tree; jangan reset/clean untuk menyamakan dengan HEAD. Clone dari commit lama belum mewakili keadaan ini.
+4. Pada pemeriksaan 20 November, checkout aktif adalah `main` (`2ad4d70`). Perubahan TLS untuk Preview sudah di-push ke `staging` (`8dc8bc5`). Periksa branch sebelum mengubah atau menguji kode yang dipakai Preview.
+
+## Staging aktif
+
+| Bagian | Status |
+| --- | --- |
+| Branch | `main` masih memakai Next.js `16.4.3`. Commit `8dc8bc5` di `staging` menambah `DATABASE_CA_CERT` dan menaikkan Next.js ke `16.4.6`. Prisma CLI, Client dan adapter tetap `7.10.1`. Instal sesuai lockfile dengan `npm ci`. |
+| Vercel Preview | GitHub mencatat deployment `8dc8bc5` berhasil. Pada 20 November, akses tanpa sesi ke `/api/health` dan `/admin/login` menerima `302` ke login Vercel. Hasil ini membuktikan proteksi Preview aktif. Health database dan login CMS dari browser yang sudah masuk belum terkonfirmasi. |
+| Supabase staging | `vector` terpasang di skema `public`. `prisma migrate status` melaporkan lima migrasi mutakhir. Dari WSL, role `jafa_app` berhasil memakai Transaction pooler `6543` dengan verifikasi TLS dan membaca tabel aplikasi. Pemeriksaan sebelumnya menemukan satu admin aktif yang masih wajib mengganti sandi. Hasil pemulihan atau login belum terkonfirmasi. |
+| Variabel Preview | Pengguna melaporkan variabel sudah diisi. Periksa cakupan **Preview → `staging`** dan pastikan deployment yang dipakai dibuat setelah penyimpanan variabel terakhir. Panduan ada di [konfigurasi operasional](docs/OPERASIONAL.md#postgresql-dan-konfigurasi-produksi). Rincian `DATABASE_CA_CERT` tersedia pada branch `staging`. |
+
+- Preview memakai URL HTTPS branch `staging` sebagai `APP_URL`, tanpa garis miring akhir. Ambil URL dari Vercel. Isikan `DATABASE_URL` dengan role aplikasi pada Transaction pooler `6543` dan `DATABASE_CA_CERT` dengan isi PEM CA Supabase. Hapus parameter SSL dari URL saat memakai CA melalui environment. Gunakan `BETTER_AUTH_SECRET` dan `AUTH_RATE_LIMIT_KEY` yang berbeda. Set `JAFA_LOCAL_DATABASE`, `JAFA_CONTENT_PREVIEW` dan `JAFA_RAG_ENABLED` ke `false`. Biarkan `OPENAI_API_KEY` kosong.
+- Migrasi dari WSL memakai Session pooler `5432` dalam konfigurasi privat. `~/.config/jafa/staging-migrate.env` untuk migrasi dan `~/.config/jafa/staging-app.env` untuk role aplikasi. Pastikan Data API Supabase mati sesuai rancangan akses server melalui Prisma. Sandi database berbeda dari sandi login CMS. Jika admin kehilangan sandi, gunakan `scripts/recover-admin.ts` dengan konfigurasi staging dari terminal privat. Prosedur ini mereset akun aktif yang sudah ada. [Pemulihan akses](docs/OPERASIONAL.md#akun-dan-pemulihan-akses)
+- Pengguna melakukan deploy dan konfigurasi cloud sendiri. Dukungan Storage Vercel masih terbuka. Unggahan gambar dan PDF saat ini bergantung pada direktori media persisten. Gunakan data sintetis untuk uji CMS teks di Preview sambil menyiapkan penyimpanan objek privat.
 
 ## Keadaan produk sekarang
 
@@ -31,7 +44,7 @@ Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose 
 - Pengguna memilih API hosted berbiaya murah, bukan model lokal. Keputusan Rp0 sebelumnya tidak berlaku lagi untuk AI; anggaran infrastruktur tidak otomatis berubah.
 - Embedding **`text-embedding-3-small`**, 1.536 dimensi, dipilih 13 November dan dikonfirmasi 16 November. Ini belum memilih model pembuat jawaban. Model generatif, plafon/tarif, akses akun dan privasi provider belum disepakati. Rekomendasi model/harga pada PRD RAG adalah proposal historis, bukan persetujuan biaya; periksa harga/akses saat akan dipakai.
 - `JAFA_RAG_ENABLED=false` adalah default. Key + anggaran/tarif embedding dapat memicu indeks berbayar meski panel AI mati. Untuk rilis inti tanpa biaya AI, pastikan **key kosong pada konfigurasi efektif**, selain flag mati.
-- Hosting, domain, lokasi data, anggaran cloud dan petugas belum ditetapkan dalam catatan proyek. Tidak ada deployment staging/produksi yang terbukti di repo.
+- Vercel dan Supabase dipilih untuk staging sementara. Target dan domain produksi, anggaran, serta petugas masih perlu ditetapkan sebelum peluncuran.
 
 ## Konfigurasi dan data lokal
 
@@ -42,9 +55,11 @@ Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose 
 - Maintenance Better Auth lama pada 26 Oktober sudah selesai; jangan mengulang prosedur historis tanpa kebutuhan baru. Akun/hash/ID dan materi harus dipertahankan.
 - `local:backup`/`local:restore` tetap khusus backup fisik PGlite. **Alat transfer logis kini tersedia** melalui `db:transfer` ([panduan](docs/PEMINDAHAN-DATA.md)): 16 tabel aplikasi/media/PDF dipertahankan, Session/Verification/RateLimit tidak dipindahkan, tujuan baru/skema sama wajib, satu audit migrasi tujuan dipertahankan. Sebelum cloud, petugas tetap memilih database produksi baru atau transfer data pengguna; jangan menyalin `.local/development-pg` ke volume native.
 - `.agents/skills` dan symlink `.claude/skills` adalah tooling lokal yang diabaikan Git, bukan kebutuhan hosting. Jangan hapus salinan kanonis tanpa memperbarui symlink; clone lain perlu menyiapkan tooling yang diperlukan secara terpisah.
+- Skill `supabase` dan `supabase-postgres-best-practices` tersedia lokal untuk Codex. Pada clone lain, pasang dengan `npx skills add supabase/agent-skills --agent codex` bila diperlukan.
 
 ## Bukti verifikasi dan batas
 
+- **TLS dan Preview, 19–20 November:** perubahan di `8dc8bc5` lulus 34 tes unit, typecheck, build produksi terisolasi dan uji CA melalui PostgreSQL native. CA yang salah ditolak. `npm audit --omit=dev` saat itu melaporkan 0 temuan setelah pembaruan Next.js. Status deployment dan proteksi Preview diperiksa ulang pada 20 November. Koneksi dari runtime Vercel dan alur browser CMS masih menunggu bukti.
 - **C3 Compose, 18 November:** typecheck, 4/4 integrasi transfer, uji native, build kedua image dan uji Compose lulus. Aplikasi membaca artikel terbit dan hasil pencarian, menyajikan gambar utuh serta membatasi PDF privat menurut peran setelah login ulang, termasuk setelah pembuatan ulang container dengan volume yang sama. Bukti `.local/transfer-compose-WqsxvE/result.json`. Batas HTTP loopback dan konfigurasi yang dipakai dicatat di [VERIFICATION.md](docs/VERIFICATION.md).
 - **C3 transfer data, 17 November:** 33/33 unit, 68/68 integrasi penuh, regresi status SQL dan typecheck lulus. Ekspor/impor native oleh role non-superuser mempertahankan 16 tabel/media/PDF/vector, mengecualikan sesi dan menolak impor ulang; seluruh nilai tetap setelah restart. `.local/transfer-native-yfkrET/result.json` mencatat `passed=true` dan cleanup container/volume/fixture. Log tambahan `.local/data-transfer-20261117-VdC43G/`. Sandbox gagal menangkap stdout beberapa tes CLI lama; pengulangan lengkap di luar sandbox lulus. Error SQL WASM yang mengubah status proses menjadi 100 kini dipulihkan di adapter tanpa menelan penolakan SQL. Tidak ada perubahan skema/dependensi, data pengguna, UI atau API berbayar.
 - **R4a, 16 November:** 33/33 unit, 63/63 integrasi penuh, 13/13 lifecycle/CLI dan typecheck lulus. Guard database belum ada kemudian lulus 2/2 CLI final + typecheck. Bukti `.local/rag-r4a-BV3jg0/result.json` dan log di direktori yang sama.
@@ -52,12 +67,12 @@ Diperbarui **18 November 2026** setelah latihan transfer melalui Docker Compose 
 - Demo `demo-final/report/report.json` di direktori bukti R4a berasal dari PDF sintetis yang disetujui petugas berbeda. Satu kasus sengaja meleset; Recall/MRR 0,5 dan exit 2 adalah hasil fixture, **bukan mutu korpus resmi**. DB/media demo dibersihkan; PDF/laporan dipertahankan privat.
 - **R3, 16 November (sebelum R4a):** 31 unit, 59 integrasi, 4 browser RAG, 4 regresi FAQ, capture 2 kasus/3 lebar, typecheck/lint dan build kedua image lulus. Bukti `.local/rag-r3-stEt90/result.json`.
 - **Native R2b/R3, 16 November:** tujuh fase HTTPS, PostgreSQL 17 + pgvector 0.8.7 dan lima migrasi sebagai role `jafa` non-superuser lulus; `.local/native-runtime-5hEJIe/result.json` memuat `passed=true` dan `isolatedResourcesRemoved=true`. Key kosong/AI mati; ini bukan generasi API nyata. Container/network/volume fixture dibersihkan, image/cache dipertahankan.
-- Build aplikasi diulang dalam uji transfer Compose 18 November. Browser dan alur native HTTPS terakhir diuji pada R3. Audit dokumentasi 17 November hanya mencocokkan berkas/bukti dengan manifest `.local/context-audit-20261117-I9cX6H/result.json`. [Rincian verifikasi](docs/VERIFICATION.md)
+- Build aplikasi diulang dalam uji transfer Compose 18 November dan paket TLS 19 November. Browser dan alur native HTTPS terakhir diuji pada R3. Audit dokumentasi 17 November mencocokkan berkas dan bukti dengan manifest `.local/context-audit-20261117-I9cX6H/result.json`. [Rincian verifikasi](docs/VERIFICATION.md)
 - Belum ada benchmark PDF resmi, kualitas semantik/generasi, UAT, persetujuan sumber/nomenklatur/simulator/kontak/privasi, audit keamanan/aksesibilitas independen, beban/backup-restore staging atau kelulusan produksi. Exception dev `Performance.measure` hanya didiagnosis bila ada reproduksi yang mengganggu alur inti.
 
 ## Pekerjaan berikutnya
 
-**Portal/cloud:** tetapkan target/budget/domain/PIC dan rencana data → versi sumber yang bisa direproduksi → staging privat dengan PostgreSQL native/media persisten/HTTPS → pemeriksaan alur nyata, keamanan, beban dan restore → UAT/persetujuan substansi → produksi dan pemantauan. Detail/kriteria selesai di [JALUR-DEPLOY.md](docs/JALUR-DEPLOY.md), [RUNTIME.md](docs/RUNTIME.md) dan [KESIAPAN-RILIS.md](docs/KESIAPAN-RILIS.md).
+**Portal/cloud:** konfirmasi variabel Preview dan redeploy `staging` bila variabel disimpan sesudah build. Buka `/api/health` dari browser yang sudah masuk ke Vercel dan pastikan `{"status":"ok"}`. Lanjutkan login admin dan ganti sandi sementara, lalu uji akun editor dan penyetuju berbeda, penerbitan, pencarian dan kerahasiaan draf. Siapkan Storage privat serta pengujian unggahan dan akses media sebelum rilis lengkap. Pindahkan perbaikan staging ke branch produksi sesuai alur rilis setelah verifikasi, lalu lanjutkan uji beban, restore, dan UAT. [Jalur deploy](docs/JALUR-DEPLOY.md) · [Kesiapan rilis](docs/KESIAPAN-RILIS.md)
 
 **RAG:** PDF resmi dan metadata → editor/penyetuju memeriksa sumber → pertanyaan/halaman acuan + R4a → keputusan model, cap/tarif, data provider dan key privat → evaluasi semantik/generasi privat → peninjauan mutu/Privasi → beta. R4a tidak menjalankan bagian semantik/generasi. Jangan menaruh key pada chat/Git.
 
